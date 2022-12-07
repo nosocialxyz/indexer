@@ -59,3 +59,7 @@ export const LENS_PERIPHERY_ABI = JSON.parse(fileLensPeriphery);
 export const INFURA_PROJECT_ID = getParam('INFURA_PROJECT_ID');
 
 export const INFURA_SECRET = getParam('INFURA_SECRET');
+
+export const PORT = 12345;
+
+export const DB_PATH = path.dirname(require.main.filename);

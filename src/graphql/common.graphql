@@ -96,6 +96,34 @@ fragment ProfileFields on Profile {
   }
 }
 
+fragment SimpleProfileFields on Profile {
+  id
+  name
+  bio
+  followNftAddress
+  metadata
+  isDefault
+  handle
+  interests
+  ownedBy
+  dispatcher {
+    address
+    canUseRelay
+  }
+  stats {
+    totalFollowers
+    totalFollowing
+    totalPosts
+    totalComments
+    totalMirrors
+    totalPublications
+    totalCollects
+  }
+  followModule {
+    ...FollowModuleFields
+  }
+}
+
 fragment PublicationStatsFields on PublicationStats {
   totalAmountOfMirrors
   totalAmountOfCollects
