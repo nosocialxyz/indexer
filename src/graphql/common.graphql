@@ -5,6 +5,57 @@ fragment MediaFields on Media {
   mimeType
 }
 
+fragment NSProfileFields on Profile {
+  _id: id
+  name
+  bio
+  isDefault
+  followNftAddress
+  metadata
+  handle
+  ownedBy
+  interests
+  attributes {
+    displayType
+    traitType
+    key
+    value
+  }
+  dispatcher {
+    address
+    canUseRelay
+  }
+  stats {
+    totalFollowers
+    totalFollowing
+    totalPosts
+    totalComments
+    totalMirrors
+    totalPublications
+    totalCollects
+  }
+  followModule {
+    ...FollowModuleFields
+  }
+  onChainIdentity {
+    ens {
+      name
+    }
+    proofOfHumanity
+    sybilDotOrg {
+      verified
+      source {
+        twitter {
+          handle
+        }
+      }
+    }
+    worldcoin {
+      isHuman
+    }
+  }
+}
+
 fragment ProfileFields on Profile {
   id
   name
@@ -128,6 +179,8 @@ fragment PublicationStatsFields on PublicationStats {
   totalAmountOfMirrors
   totalAmountOfCollects
   totalAmountOfComments
+  totalUpvotes
+  totalDownvotes
 }
 
 fragment MetadataOutputFields on MetadataOutput {
@@ -174,6 +227,32 @@ fragment Erc20Fields on Erc20 {
   symbol
   decimals
   address
+}
+
+fragment NSPostFields on Post {
+  _id: id
+  appId
+  profile {
+    id
+  }
+  stats {
+    ...PublicationStatsFields
+  }
+  metadata {
+    ...MetadataOutputFields
+  }
+  createdAt
+  collectModule {
+    ...CollectModuleFields
+  }
+  referenceModule {
+    ...ReferenceModuleFields
+  }
+  hidden
+  reaction(request: null)
+  mirrors(by: null)
+  hasCollectedByMe
+  isGated
 }
 
 fragment PostFields on Post {
@@ -227,6 +306,39 @@ fragment MirrorBaseFields on Mirror {
   isGated
 }
 
+fragment NSMirrorFields on Mirror {
+  _id: id
+  appId
+  profile {
+    id
+  }
+  stats {
+    ...PublicationStatsFields
+  }
+  metadata {
+    ...MetadataOutputFields
+  }
+  createdAt
+  collectModule {
+    ...CollectModuleFields
+  }
+  referenceModule {
+    ...ReferenceModuleFields
+  }
+  hidden
+  reaction(request: null)
+  hasCollectedByMe
+  isGated
+  mirrorOf {
+    ... on Post {
+      id
+    }
+    ... on Comment {
+      id
+    }
+  }
+}
+
 fragment MirrorFields on Mirror {
   ...MirrorBaseFields
   mirrorOf {
@@ -263,6 +375,54 @@ fragment CommentBaseFields on Comment {
   mirrors(by: null)
   hasCollectedByMe
   isGated
+}
+
+fragment NSCommentFields on Comment {
+  _id: id
+  appId
+  profile {
+    id
+  }
+  commentOn {
+    ... on Post {
+      __typename
+      id
+    }
+    ... on Comment {
+       __typename
+      id
+    }
+    ... on Mirror {
+       __typename
+      id
+    }
+  }
+  stats {
+    ...PublicationStatsFields
+  }
+  metadata {
+    ...MetadataOutputFields
+  }
+  createdAt
+  collectModule {
+    ...CollectModuleFields
+  }
+  referenceModule {
+    ...ReferenceModuleFields
+  }
+  hidden
+  reaction(request: null)
+  mirrors(by: null)
+  hasCollectedByMe
+  isGated
+  mainPost {
+    ... on Post {
+      id
+    }
+    ... on Mirror {
+      id
+    }
+  }
 }
 
 fragment CommentFields on Comment {

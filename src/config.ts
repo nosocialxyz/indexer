@@ -62,4 +62,6 @@ export const INFURA_SECRET = getParam('INFURA_SECRET');
 
 export const PORT = 12345;
 
-export const DB_PATH = path.dirname(require.main.filename);
+export const DB_PATH = "/opt/nosocial/db";
+
+export const mongoServURI = 'mongodb://localhost:27017';

@@ -1,14 +1,14 @@
-query publication($request: PublicationQueryRequest!) {
+query Publication($request: PublicationQueryRequest!) {
   publication(request: $request) {
     __typename
     ... on Post {
-      ...PostFields
+      ...NSPostFields
     }
     ... on Comment {
-      ...CommentFields
+      ...NSCommentFields
     }
     ... on Mirror {
-      ...MirrorFields
+      ...NSMirrorFields
     }
   }
 }

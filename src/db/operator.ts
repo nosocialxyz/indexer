@@ -1,144 +1,145 @@
-import { Database } from 'sqlite';
 import { logger } from '../utils/logger';
-import { formatError } from '../utils';
-import { TRYOUT } from '../consts';
-import {
-  FileStatus,
-  Record,
-  RecordShow,
-  ElrondTimestamp,
-  DbOperator,
-} from '../types/database';
+import { loadDB, MongoDB } from '../db';
+import { DbOperator } from '../types/database.d';
 
-export function createRecordOperator(db: Database): DbOperator {
-  const addRecord = async (
-    customer: string,
-    merchant: string,
-    cid: string,
-    size: number,
-    token: string,
-    price: string,
-    blockNumber: number,
-    chainType: string,
-    txHash: string,
-    timestamp: number,
-  ): Promise<void> => {
-    try {
-      await db.run(
-        'insert into record ' +
-          '(`customer`, `merchant`, `cid`, `size`, `token`, `price`, `blockNumber`, `chainType`, `txHash`, `timestamp`, `tryout`, `status`)' +
-          ' values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          customer,
-          merchant,
-          cid,
-          size,
-          token,
-          price,
-          blockNumber,
-          chainType,
-          txHash,
-          timestamp,
-          0,
-          'new',
-        ],
-      );
-      logger.info(`Add ${chainType} task successfully.`);
-      logger.info(`  customer:${customer}`);
-      logger.info(`  merchant:${merchant}`);
-      logger.info(`  cid:${cid}`);
-      logger.info(`  size:${size}`);
-      logger.info(`  price:${price}`);
-      logger.info(`  token:${token}`);
-    } catch(e) {
-      const err_code = JSON.parse(JSON.stringify(e)).code;
-      if (err_code !== 'SQLITE_CONSTRAINT') {
-        throw e;
+export async function getDbOperatorByName(name: string): Promise<DbOperator> {
+  const db = await loadDB(name);
+  if (db == null)
+    throw `Load DB:${name} failed`;
+
+  return createDBOperator(db);
+}
+
+export function createDBOperator(db: MongoDB): DbOperator {
+  const profileColl = 'profile';
+  const publicationColl = 'publication';
+  const cursorColl = 'cursor';
+
+  const insertOne = async (collName: string, data: any): Promise<void> => {
+    return await db.insertOne(collName, data);
+  }
+
+  const insertMany = async (collName: string, data: any): Promise<void> => {
+    return await db.insertMany(collName, data);
+  }
+
+  const deleteOne = async (collName: string, query: any): Promise<void> => {
+    await db.deleteOne(collName, query);
+  }
+
+  const deleteMany = async (collName: string, query: any): Promise<void> => {
+    await db.deleteMany(collName, query);
+  }
+
+  const deleteCursor = async (query: any): Promise<void> => {
+    await db.deleteMany(cursorColl, query);
+  }
+
+  const updateProfileCursor = async (cursor: any): Promise<void> => {
+    const query = { _id: 'profile' };
+    const updateData = { value: cursor };
+    const options = { upsert: true };
+    await db.updateOne(cursorColl, query, updateData, options);
+  }
+
+  const updatePublicationCursor = async (id: string, cursor: any): Promise<void> => {
+    const query = { _id: id };
+    const updateData = { value: cursor };
+    const options = { upsert: true };
+    await db.updateOne(cursorColl, query, updateData, options);
+  }
+
+  const getProfileCursor = async (): Promise<string> => {
+    const cursor = await db.findOne(cursorColl, {
+      _id: 'profile',
+    });
+    if (cursor == null) {
+      return '{}';
+    } else {
+      return cursor.value;
+    }
+  }
+
+  const getPublicationCursor = async (id: string): Promise<string> => {
+    const cursor = await db.findOne(cursorColl, {
+      _id: id,
+    });
+    if (cursor == null) {
+      return '{}';
+    } else {
+      return cursor.value;
+    }
+  }
+
+  /*
+  const getNullPubCursor = async (): Promise<string[]> {
+    const res = await db.aggregate(publicationColl, [
+      {
+        $match:{_id: {$ne: 'Profile'}, value: {$eq: "{}"}},
+      },
+      {
+        $group: {"_id": 0, "value": {$addToSet: "value"}},
+      },
+      {
+        $project: {"_id": 0, "value": 1},
       }
-    }
-  };
+    ]);
+    return (await res.toArray())[0].value;
+  }
+  */
 
-  const getRecordByType = async (
-    status: string,
-    chainType: string,
-  ): Promise<RecordShow[]> => {
-    let params: string[] = []; 
-    status === '' || params.push(`status = '${status}'`);
-    chainType === '' || params.push(`chainType = '${chainType}'`);
-    let where = "";
-    if (params.length > 0) {
-      where = `where ${params.join(' and ')}`;
-    }
-    const records = await db.all(
-      `select customer, merchant, cid, size, token, price, blockNumber, chainType, txHash, timestamp, status from record ${where} order by timestamp asc`,
-      [],
-    );
-    return records;
-  };
+  const getNotNullPubCursor = async (): Promise<string[]> => {
+    const res = await db.aggregate(cursorColl, [
+      {
+        $match:{_id: {$ne: 'profile'}, value: {$ne: "{}"}},
+      },
+      {
+        $group: {"_id": 0, "id": {$addToSet: "$_id"}},
+      },
+      {
+        $project: {"_id": 0, "id": 1},
+      }
+    ]);
+    const resArray = await res.toArray();
+    if (resArray.length === 0)
+      return [];
 
-  const getNewRecord = async (): Promise<Record[]> => {
-    const records = await db.all(
-      'select id, cid, size, blockNumber, txHash, status from record where status = ? and tryout < ? order by timestamp asc',
-      ["new", TRYOUT],
-    );
-    return records;
-  };
+    return resArray[0].id
+  }
 
-  const getOrderedRecord = async (): Promise<Record[]> => {
-    const records = await db.all(
-      'select id, cid, size, blockNumber, txHash, status from record where status = ? and tryout < ? order by timestamp asc',
-      ["ordered", TRYOUT],
-    );
-    return records;
-  };
+  const getProfileIds = async (): Promise<string[]> => {
+    const res = await db.aggregate(profileColl, [
+      {
+        $match: {__typename: 'Profile'},
+      },
+      {
+        $group: {"_id": 0, "id": {$addToSet: "$_id"}},
+      },
+      {
+        $project: {"_id": 0, "id": 1},
+      }
+    ]);
+    const resArray = await res.toArray();
+    if (resArray.length === 0)
+      return [];
 
-  const getElrondLatestTimestamp = async (): Promise<number> => {
-    const records = await db.all(
-      'select id, blockNumber from record where chainType = ? order by blockNumber desc',
-      ["elrond"],
-    );
-    if (records.length > 0) {
-      return records[0].blockNumber;
-    }
-    return 0;
-  };
+    return resArray[0].id
+  }
 
-  const getXStorageLatestBlkNum = async (): Promise<number> => {
-    const records = await db.all(
-      'select id, blockNumber from record where chainType = ? order by blockNumber desc',
-      ["xstorage"],
-    );
-    if (records.length > 0) {
-      return records[0].blockNumber;
-    }
-    return 0;
-  };
-
-  const updateStatus = async (
-    id: number,
-    status: FileStatus,
-  ): Promise<void> => {
-    await db.run(
-      `update record set status = ? where id = ? `,
-      [status, id],
-    );
-  };
-
-  const increaseTryout = async (id: number, step = 1): Promise<void> => {
-    await db.run(
-      `update record set tryout = tryout + ?, status = CASE WHEN tryout + ? >= ? THEN 'tryout' ELSE 'new' END where id = ?`,
-      [step, step, TRYOUT, id],
-    )
+  const getLensStats = async (): Promise<any> => {
   }
 
   return {
-    addRecord,
-    getRecordByType,
-    getNewRecord,
-    getOrderedRecord,
-    getElrondLatestTimestamp,
-    getXStorageLatestBlkNum,
-    updateStatus,
-    increaseTryout,
-  };
+    insertOne,
+    insertMany,
+    deleteOne,
+    deleteMany,
+    deleteCursor,
+    updateProfileCursor,
+    updatePublicationCursor,
+    getProfileCursor,
+    getPublicationCursor,
+    getNotNullPubCursor,
+    getProfileIds,
+  }
 }

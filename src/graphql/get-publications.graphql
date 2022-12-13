@@ -1,7 +1,7 @@
-query ExplorePublications($request: ExplorePublicationRequest!) {
-  explorePublications(request: $request) {
+query Publications($request: PublicationsQueryRequest!) {
+  publications(request: $request) {
     items {
-      __typename
+      __typename 
       ... on Post {
         ...NSPostFields
       }
