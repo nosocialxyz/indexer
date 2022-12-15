@@ -31,17 +31,13 @@ export async function closeAllDB() {
 }
 
 export class MongoDB {
-  private client: any;
+  public client: any;
+  public dbHandler: any;
   private dbName: string;
 
   public constructor(dbName: string) {
     this.dbName = dbName;
   }
-
-  // Connection URI
-  //const uri =
-  //  "http://localhost:27017";
-    //"http://localhost:27017/?maxPoolSize=20&w=majority";
 
   async connect(): Promise<boolean> {
     try {
@@ -51,6 +47,7 @@ export class MongoDB {
       await this.client.connect();
       // Establish and verify connection
       await this.client.db(this.dbName).command({ ping: 1 });
+      this.dbHandler = this.client.db(this.dbName);
       logger.info("Connected successfully to server");
     } catch (e: any) {
       logger.error(e);

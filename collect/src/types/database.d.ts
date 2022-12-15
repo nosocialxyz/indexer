@@ -5,9 +5,12 @@ export interface DbOperator {
   deleteMany: (collName: string, query: any) => Promise<void>;
   deleteCursor: (query: any) => Promise<void>;
   updateProfileCursor: (cursor: any) => Promise<void>;
-  updatePublicationCursor: (id: string, cursor: any) => Promise<void>;
+  updateProfileCursorAndTime: (id: string, cursor: string, timeStamp: number) => Promise<void>;
+  updatePublicationCursor: (id: string, cursor: string) => Promise<void>;
+  updateLastUpdateById: (id: string, timeStamp: number) => Promise<void>;
+  updateLastUpdateTimeStamp: (timeStamp: number) => Promise<void>;
   getProfileCursor: () => Promise<string>;
   getPublicationCursor: (id: string) => Promise<string>;
-  getNotNullPubCursor: () => Promise<string[]>;
-  getProfileIds: () => Promise<string[]>;
+  getProfileIds: () => Promise<any>;
+  getAllProfileIds: () => Promise<any>;
 }

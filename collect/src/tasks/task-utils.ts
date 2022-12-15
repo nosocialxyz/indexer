@@ -1,12 +1,14 @@
 import { Task } from '../types/tasks';
 import { formatError } from '../utils';
 import { logger } from '../utils/logger';
+import { AppContext } from '../types/context.d';
 
 export async function makeIntervalTask(
   startDelay: number,
   interval: number, // in millseconds
   name: string,
-  handlerFn: () => Promise<void>,
+  context: AppContext,
+  handlerFn: (context: AppContext) => Promise<void>,
 ): Promise<Task> {
   logger.info('start task: "%s"', name);
   if (startDelay <= 0 || interval <= 0) {
@@ -20,7 +22,7 @@ export async function makeIntervalTask(
       return;
     }
     try {
-      await handlerFn();
+      await handlerFn(context);
     } catch (e) {
       logger.error(
         'unexpected execption running task "%s", %s',
@@ -38,7 +40,7 @@ export async function makeIntervalTask(
     name,
     start: () => {
       logger.info(`task "${name}" started`);
-      handlerFn();
+      handlerFn(context);
       timer = setTimeout(doInterval, startDelay);
       stopped = false;
     },

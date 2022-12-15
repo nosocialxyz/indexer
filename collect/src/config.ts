@@ -65,3 +65,10 @@ export const PORT = 12345;
 export const DB_PATH = "/opt/nosocial/db";
 
 export const mongoServURI = 'mongodb://localhost:27017';
+
+export const LENS_DATA_LIMIT = 50;
+
+export const DBNAME = 'test2';
+export const PROFILE_COLL = 'profile';
+export const PUBLICATION_COLL = 'publication';
+export const CURSOR_COLL = 'cursor';

@@ -5,6 +5,55 @@ fragment MediaFields on Media {
   mimeType
 }
 
+fragment ProfileFields1 on Profile {
+  id
+  name
+  bio
+  metadata
+  isDefault
+  handle
+  interests
+  picture {
+    ... on NftImage {
+      contractAddress
+      tokenId
+      uri
+      verified
+    }
+    ... on MediaSet {
+      original {
+        ...MediaFields
+      }
+      small {
+        ...MediaFields
+      }
+      medium {
+        ...MediaFields
+      }
+    }
+  }
+  coverPicture {
+    ... on NftImage {
+      contractAddress
+      tokenId
+      uri
+      verified
+    }
+    ... on MediaSet {
+      original {
+        ...MediaFields
+      }
+      small {
+        ...MediaFields
+      }
+      medium {
+        ...MediaFields
+      }
+    }
+  }
+  ownedBy
+}
+
 fragment NSProfileFields on Profile {
   _id: id
   name

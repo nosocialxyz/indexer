@@ -1,7 +1,8 @@
 import { logger } from '../utils/logger';
 import { Task } from '../types/tasks';
-import { PORT } from '../config';
-import { getDbOperatorByName } from '../db/operator';
+import { PORT, DBNAME } from '../config';
+import { loadDB } from '../db';
+import { AppContext } from '../types/context.d';
 import { apis } from './';
 
 const http = require('http');
@@ -13,7 +14,6 @@ export async function createAPI(): Promise<Task> {
       const server = http.createServer();
 
       server.on('request', async(req: any, res: any) => {
-        const dbOps = await getDbOperatorByName('test')
         let url = new URL(req.url, `http://${req.headers.host}`)
         let resCode = 200
         let resBody = {}
@@ -35,7 +35,6 @@ export async function createAPI(): Promise<Task> {
           if ('/lens/stats' === route) {
             const status = url.searchParams.get('status') || '';
             const chainType = url.searchParams.get('chainType') || '';
-            //resBody = await dbOps.getRecordByType(status, chainType);
           } else {
             resMsg = `Unknown request:${url.pathname}`;
             resCode = 404;
@@ -43,11 +42,27 @@ export async function createAPI(): Promise<Task> {
         } else if (req.method === 'POST') {
           // Do POST request
           if ('/get/profiles' === route) {
-            apis.getProfiles();
-            resMsg = 'Start get-profiles task successfully!';
+            const db = await loadDB(DBNAME);
+            if (db === null) {
+              resMsg = 'Get profiles failed, error: load DB failed.';
+            } else {
+              const ct: AppContext = {
+                database: db,
+              }
+              apis.getProfiles(ct);
+              resMsg = 'Start get-profiles task successfully!';
+            }
           } else if ('/get/publications' === route) {
-            apis.getPublications();
-            resMsg = 'Start get-publications task successfully!';
+            const db = await loadDB(DBNAME);
+            if (db === null) {
+              resMsg = 'Get publications failed, error: load DB failed.';
+            } else {
+              const ct: AppContext = {
+                database: db,
+              }
+              apis.getPublications(ct);
+              resMsg = 'Start get-publications task successfully!';
+            }
           } else {
             resMsg = `Unknown request:${url.pathname}`;
             resCode = 404;

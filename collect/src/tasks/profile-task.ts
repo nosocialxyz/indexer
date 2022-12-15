@@ -1,39 +1,38 @@
 import Bluebird from 'bluebird';
 import { exploreProfiles } from '../operation/get-profiles';
 import { ProfileSortCriteria } from '../graphql/generated';
-import { getDbOperatorByName } from '../db/operator';
+import { createDBOperator } from '../db/operator';
 import { makeIntervalTask } from './task-utils';
 import { Task } from '../types/tasks.d';
+import { AppContext } from '../types/context.d';
 import { logger } from '../utils/logger';
+import { LENS_DATA_LIMIT, PROFILE_COLL } from '../config';
 import Lock from '../utils/lock';
 
 const sharedBuffer = new SharedArrayBuffer(1 * Int32Array.BYTES_PER_ELEMENT);
 const sharedArray = new Int32Array(sharedBuffer);
 const lock = new Lock(sharedArray, 0);
 
-export async function getProfiles() {
+export async function getProfiles(context: AppContext) {
   if (!lock.tryLock()) {
     logger.info('try to get profiles lock failed.');
     return;
   }
   try {
-    const dbOperator = await getDbOperatorByName('test');
-    const collName = "profile";
-    const rowStep = 50;
+    const dbOperator = await createDBOperator(context.database);
     let cursor = await dbOperator.getProfileCursor();
     while (true) {
       const res = await exploreProfiles({
         sortCriteria: ProfileSortCriteria.MostFollowers,
         cursor: cursor,
-        limit: rowStep
+        limit: LENS_DATA_LIMIT,
       })
       cursor = res.pageInfo.next;
-      //logger.info(res.items.length)
       if (res.items.length === 0) {
         await dbOperator.updateProfileCursor('{}');
         break;
       }
-      await dbOperator.insertMany(collName, res.items);
+      await dbOperator.insertMany(PROFILE_COLL, res.items);
       // Update cursor for unexpected crash
       await dbOperator.updateProfileCursor(cursor);
 
@@ -47,12 +46,13 @@ export async function getProfiles() {
   }
 }
 
-export async function createProfileTask(): Promise<Task> {
+export async function createProfileTask(context: AppContext): Promise<Task> {
   const interval = 15 * 60 * 1000;
   return makeIntervalTask(
     interval,
     interval,
     'get-profiles',
+    context,
     getProfiles,
   );
 }

@@ -3,7 +3,9 @@ import { loadTasks } from "./tasks";
 import _ from 'lodash';
 import { Dayjs } from './utils/datetime';
 import { logger } from './utils/logger';
-import { closeAllDB } from './db';
+import { loadDB, closeAllDB } from './db';
+import { DBNAME } from './config';
+import { AppContext } from './types/context.d';
 import { timeout } from "./utils/promise-utils";
 
 const MaxTickTimout = 15 * 1000;
@@ -12,7 +14,14 @@ const MaxNoNewBlockDuration = Dayjs.duration({
 });
 
 async function main() {
-  const tasks = await loadTasks()
+  const db = await loadDB(DBNAME);
+  if (db === null)
+    process.exit(1);
+
+  const context: AppContext = {
+    database: db,
+  }
+  const tasks = await loadTasks(context);
 
   try {
     _.forEach(tasks, (t: any) => t.start());
