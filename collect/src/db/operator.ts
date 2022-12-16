@@ -175,7 +175,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  //const getAllProfileIds = async (): Promise<string[]> => {
   const getAllProfileIds = async (): Promise<any> => {
     try {
       return await db.dbHandler.collection(profileColl).find({__typename: 'Profile'}).project({_id:1});

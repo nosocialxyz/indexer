@@ -10,8 +10,8 @@ import { getPublications } from './publication-task';
 export function loadTasks(context: AppContext) {
   let tasks = [
     createAPI,
-    createProfileTask,
-    createPublicationTask,
+    //createProfileTask,
+    //createPublicationTask,
   ];
   //tasks = tasks.filter(n => n !== null );
   return Bluebird.mapSeries(tasks, (t: any) => {

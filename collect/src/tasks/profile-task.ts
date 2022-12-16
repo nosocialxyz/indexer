@@ -40,7 +40,6 @@ export async function getProfiles(context: AppContext) {
     }
   } catch(e: any) {
     logger.error(e);
-    return;
   } finally {
     lock.unlock();
   }

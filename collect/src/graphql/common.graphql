@@ -64,6 +64,44 @@ fragment NSProfileFields on Profile {
   handle
   ownedBy
   interests
+  picture {
+    ... on NftImage {
+      contractAddress
+      tokenId
+      uri
+      verified
+    }
+    ... on MediaSet {
+      original {
+        ...MediaFields
+      }
+      small {
+        ...MediaFields
+      }
+      medium {
+        ...MediaFields
+      }
+    }
+  }
+  coverPicture {
+    ... on NftImage {
+      contractAddress
+      tokenId
+      uri
+      verified
+    }
+    ... on MediaSet {
+      original {
+        ...MediaFields
+      }
+      small {
+        ...MediaFields
+      }
+      medium {
+        ...MediaFields
+      }
+    }
+  }
   attributes {
     displayType
     traitType

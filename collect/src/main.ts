@@ -7,6 +7,7 @@ import { loadDB, closeAllDB } from './db';
 import { DBNAME } from './config';
 import { AppContext } from './types/context.d';
 import { timeout } from "./utils/promise-utils";
+import { monitorLensContract } from "./tasks/monitor-ploygon";
 
 const MaxTickTimout = 15 * 1000;
 const MaxNoNewBlockDuration = Dayjs.duration({
@@ -25,6 +26,7 @@ async function main() {
 
   try {
     _.forEach(tasks, (t: any) => t.start());
+    monitorLensContract();
     await doEventLoop();
   } catch(e) {
     logger.error(`unexpected error occurs, message:${e}`);
