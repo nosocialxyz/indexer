@@ -2,29 +2,27 @@ import Bluebird from 'bluebird';
 import { PublicationTypes } from '../graphql/generated';
 import { queryPublications } from '../operation/get-publications';
 import { makeIntervalTask } from './task-utils';
-import { logger } from '../utils/logger';
 import { randomRange } from '../utils';
 import { Task } from '../types/tasks.d';
 import { AppContext } from '../types/context.d';
 import { createDBOperator } from '../db/operator';
-import { LENS_DATA_LIMIT, PUBLICATION_COLL } from '../config';
+import { LENS_DATA_LIMIT } from '../config';
 import Lock from '../utils/lock';
 import os from 'os';
 
-//const maxTaskNum = os.cpus().length / 2;
-const maxTaskNum = 4;
+const maxTaskNum = os.cpus().length / 2;
+//const maxTaskNum = 4;
 const sharedBuffer = new SharedArrayBuffer(1 * Int32Array.BYTES_PER_ELEMENT);
 const sharedArray = new Int32Array(sharedBuffer);
 const lock = new Lock(sharedArray, 0);
-let lastUpdateTimeStamp = 0;
 
 async function getPublication(context: AppContext, id: string) {
-  try {
-    const dbOperator = await createDBOperator(context.database);
-    let cursor = await dbOperator.getPublicationCursor(id);
-    while (true) {
-      const sec = randomRange(1, 5);
-      await Bluebird.delay(sec * 1000);
+  const logger = context.logger;
+  const dbOperator = await createDBOperator(context.database);
+  let cursor = await dbOperator.getPublicationCursor(id);
+  while (true) {
+    try {
+      await Bluebird.delay(randomRange(1, 5) * 1000);
       const res = await queryPublications({
         profileId: id,
         publicationTypes: [ 
@@ -35,40 +33,72 @@ async function getPublication(context: AppContext, id: string) {
         cursor: cursor,
         limit: LENS_DATA_LIMIT,
       })
-      if (res === null || res.publications.items.length === 0)
-        break;
 
       const items = res.publications.items;
-      await dbOperator.insertMany(PUBLICATION_COLL, items);
-      if (items.length < LENS_DATA_LIMIT)
-        break
+      if (items.length > 0)
+        await dbOperator.insertPublications(items);
 
+      if (items.length < LENS_DATA_LIMIT) {
+        await dbOperator.updatePublicationCursor(id, '{}');
+        break;
+      }
       // Update publication cursor for unexpected crash
       cursor = res.publications.pageInfo.next;
       await dbOperator.updatePublicationCursor(id, cursor);
-
-      //logger.info(`id:${id} get publications num:${items.length}`);
+    } catch (e: any) {
+      logger.error(`Get publication(profileId:${id}) error,info:${e}`);
+      if (e.statusCode === 404) {
+        await dbOperator.updatePublicationCursor(id, '{}');
+        break;
+      }
+      if (e.networkError.statusCode === 429)
+        await Bluebird.delay(5 * 60 * 1000);
     }
-    logger.info(`id:${id},cursor:${cursor},lastUpdateTimeStamp:${lastUpdateTimeStamp} done.`);
-    await dbOperator.updateProfileCursorAndTime(id, cursor, lastUpdateTimeStamp);
-  } catch (e: any) {
-    logger.error(e);
   }
+  logger.info(`id:${id},cursor:${cursor} done.`);
 }
 
-export async function getPublications(context: AppContext) {
-  if (!lock.tryLock()) {
-    logger.info('try to get publications lock failed.');
-    return;
+export async function createPublicationTask(context: AppContext) {
+  const logger = context.logger;
+  logger.info('start get publications');
+  const dbOperator = await createDBOperator(context.database);
+  while (true) {
+    try {
+      const isFinished = await dbOperator.isUpdateFinished();
+      const ids = await dbOperator.getProfileIds();
+      let idArray: string[] = [];
+      while (await ids.hasNext()) {
+        idArray.push((await ids.next())._id);
+        if (idArray.length >= 10000) {
+          logger.info(`profile num:${idArray.length}`)
+          await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
+          idArray = [];
+        }
+      }
+      if (idArray.length > 0) {
+        logger.info(`profile num:${idArray.length}`)
+        await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
+      }
+      if (isFinished)
+        break;
+
+      await Bluebird.delay(3 * 1000);
+    } catch (e: any) {
+      logger.error(e);
+    }
   }
+  logger.info('Update publications complete.');
+}
+
+export async function updatePublications(context: AppContext) {
+  const logger = context.logger;
+  logger.info('Update publications');
+  const dbOperator = await createDBOperator(context.database);
   try {
-    lastUpdateTimeStamp = Date.now();
-    const dbOperator = await createDBOperator(context.database);
     const ids = await dbOperator.getProfileIds();
     let idArray: string[] = [];
     while (await ids.hasNext()) {
       idArray.push((await ids.next())._id);
-      //logger.info(idArray[0]);
       if (idArray.length >= 10000) {
         logger.info(`profile num:${idArray.length}`)
         await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
@@ -79,23 +109,8 @@ export async function getPublications(context: AppContext) {
       logger.info(`profile num:${idArray.length}`)
       await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
     }
-
-    await dbOperator.updateLastUpdateTimeStamp(lastUpdateTimeStamp);
   } catch (e: any) {
-    logger.error(e);
-  } finally {
-    logger.info('Get publications done.');
-    lock.unlock();
+    logger.error(`Update publications failed, error:${e}`);
   }
-}
-
-export async function createPublicationTask(context: AppContext): Promise<Task> {
-  const interval = 3 * 60 * 1000;
-  return makeIntervalTask(
-    interval,
-    interval,
-    'get-publications',
-    context,
-    getPublications,
-  );
+  logger.info('Update publications complete.');
 }

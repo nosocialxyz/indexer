@@ -1,25 +1,37 @@
 import Bluebird from 'bluebird';
 import { AppContext } from "../types/context.d";
 import { createAPI } from "./api-task";
+import { createDBOperator } from '../db/operator';
 import { createProfileTask } from "./profile-task";
 import { createPublicationTask } from "./publication-task";
+import { createChildLoggerWith } from "../utils/logger";
 
-import { getProfiles } from './profile-task';
-import { getPublications } from './publication-task';
+export async function loadTasks(context: AppContext) {
+  const db = context.database;
+  const dbOperator = await createDBOperator(db);
+  const syncedBlock = await dbOperator.getSyncedBlockNumber();
+  if (syncedBlock > 0)
+    return;
 
-export function loadTasks(context: AppContext) {
+  await dbOperator.setStartBlockNumber();
   let tasks = [
-    createAPI,
-    //createProfileTask,
-    //createPublicationTask,
+    {
+      name: 'api',
+      task: createAPI,
+    },
+    {
+      name: 'explore:profiles',
+      task: createProfileTask,
+    },
+    {
+      name: 'get:publications',
+      task: createPublicationTask,
+    },
   ];
-  //tasks = tasks.filter(n => n !== null );
-  return Bluebird.mapSeries(tasks, (t: any) => {
-    return t(context);
+  await Bluebird.map(tasks, async (task: any) => {
+    context.logger = createChildLoggerWith({
+      moduleId: task.name,
+    },context.logger);
+    await task.task(context);
   });
-}
-
-export const apis = {
-  getProfiles: getProfiles,
-  getPublications: getPublications,
 }

@@ -1,12 +1,15 @@
+import { ethers } from "ethers";
 import { logger } from '../utils/logger';
 import { loadDB, MongoDB } from '../db';
 import { DbOperator } from '../types/database.d';
+import { 
+  POLYGON_ENDPOINT,
+  PROFILE_COLL,
+  PUBLICATION_COLL,
+  CURSOR_COLL,
+} from "../config";
 
 export function createDBOperator(db: MongoDB): DbOperator {
-  const profileColl = 'profile';
-  const publicationColl = 'publication';
-  const cursorColl = 'cursor';
-
   const insertOne = async (collName: string, data: any): Promise<void> => {
     try {
       await db.dbHandler.collection(collName).insertOne(data);
@@ -22,6 +25,26 @@ export function createDBOperator(db: MongoDB): DbOperator {
     } catch (e: any) {
       if (e.code !== 11000)
         logger.error(`Insert many data failed, message:${e}`);
+    }
+  }
+
+  const insertProfiles = async (data: any): Promise<any> => {
+    try {
+      const options = { ordered: false };
+      return await db.dbHandler.collection(PROFILE_COLL).insertMany(data, options);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        logger.error(`Insert profiles failed, message:${e}`);
+    }
+  }
+
+  const insertPublications = async (data: any): Promise<void> => {
+    try {
+      const options = { ordered: false };
+      return await db.dbHandler.collection(PUBLICATION_COLL).insertMany(data, options);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        logger.error(`Insert publications failed, message:${e}`);
     }
   }
 
@@ -41,29 +64,22 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const deleteCursor = async (query: any): Promise<void> => {
-    await deleteMany(cursorColl, query);
+  const isUpdateFinished = async (): Promise<boolean> => {
+    const query = { _id: 'profile' };
+    const res = await db.dbHandler.collection(CURSOR_COLL).findOne(query);
+    return res != null && res.status === 'complete';
   }
 
-  const updateProfileCursor = async (cursor: any): Promise<void> => {
+  const updateProfileCursor = async (cursor: any, status?: string): Promise<void> => {
     try {
       const query = { _id: 'profile' };
-      const updateData = { value: cursor };
-      const options = { upsert: true };
-      await db.dbHandler.collection(cursorColl).updateOne(query, { $set: updateData }, options);
+      const updateData = { 
+        value: cursor, 
+        status: status,
+      };
+      const options = { upsert: true }; await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
     } catch (e: any) {
       logger.error(`Update profile cursor failed, message:${e}`);
-    }
-  }
-
-  const updateProfileCursorAndTime = async (id: string, cursor: string, timeStamp: number): Promise<void> => {
-    try {
-      const query = { _id: id };
-      const updateData = { publicationCursor: cursor, lastUpdateTimeStamp: timeStamp };
-      const options = { upsert: true };
-      await db.dbHandler.collection(profileColl).updateOne(query, { $set: updateData }, options);
-    } catch (e: any) {
-      logger.error(`Update profile cursor and lastUpdateTimeStamp failed, message:${e}`);
     }
   }
 
@@ -72,40 +88,28 @@ export function createDBOperator(db: MongoDB): DbOperator {
       const query = { _id: id };
       const updateData = { publicationCursor: cursor };
       const options = { upsert: true };
-      await db.dbHandler.collection(profileColl).updateOne(query, { $set: updateData }, options);
+      await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData }, options);
     } catch (e: any) {
       logger.error(`Update publication cursor failed, message:${e}`);
     }
   }
 
-  const updateLastUpdateById = async (id: string, timeStamp: number): Promise<void> => {
+  const updateProfile = async (data: any) => {
     try {
-      const query = { _id: id };
-      const updateData = { lastUpdateTimeStamp: timeStamp };
+      const query = { _id: data._id };
       const options = { upsert: true };
-      await db.dbHandler.collection(profileColl).updateOne(query, { $set: updateData }, options);
+      await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
     } catch (e: any) {
-      logger.error(`Update lastUpdateTimeStamp by profile id failed, message:${e}`);
-    }
-  }
-
-  const updateLastUpdateTimeStamp = async (timeStamp: number) => {
-    try {
-      const query = { _id: 'timeStamp' };
-      const updateData = { lastUpdateTimeStamp: timeStamp };
-      const options = { upsert: true };
-      await db.dbHandler.collection(cursorColl).updateOne(query, { $set: updateData }, options);
-    } catch (e: any) {
-      logger.error(`Update lastUpdateTimeStamp failed, message:${e}`);
+      logger.error(`Update profile(${data._id}) failed, message:${e}`);
     }
   }
 
   const getProfileCursor = async (): Promise<string> => {
     try {
-      const cursor = await db.dbHandler.collection(cursorColl).findOne({
+      const cursor = await db.dbHandler.collection(CURSOR_COLL).findOne({
         _id: 'profile',
       });
-      if (cursor == null) {
+      if (cursor === null) {
         return '{}';
       } else {
         return cursor.value;
@@ -118,12 +122,14 @@ export function createDBOperator(db: MongoDB): DbOperator {
 
   const getPublicationCursor = async (id: string): Promise<string> => {
     try {
-      const cursor = await db.dbHandler.collection(profileColl).findOne({
+      const cursor = await db.dbHandler.collection(PROFILE_COLL).findOne({
         _id: id,
       });
       if (cursor == null) {
         return '{}';
       } else {
+        if (cursor.publicationCursor === undefined)
+          return '{}';
         return cursor.publicationCursor;
       }
     } catch (e: any) {
@@ -134,73 +140,91 @@ export function createDBOperator(db: MongoDB): DbOperator {
 
   const getProfileIds = async (): Promise<any> => {
     try {
-      const ts = await db.dbHandler.collection(cursorColl).findOne({_id:'timeStamp'});
-      if (ts === null)
-        return await getAllProfileIds();
-
-      const lastUpdateTimeStamp = ts.lastUpdateTimeStamp;
-      const res = await db.dbHandler.collection(profileColl).find(
+      const res = await db.dbHandler.collection(PROFILE_COLL).find(
         {
           $or: [
-            {lastUpdateTimeStamp: {$exists: false}},
-            {lastUpdateTimeStamp: {$lt: lastUpdateTimeStamp}}
+            {publicationCursor: {$exists: false}},
+            {publicationCursor: {$ne: '{}'}}
           ]
-        },
-        {
-          projection: {_id: 1}
-        },
-      )
-      return res;
-      /*
-      const res = await db.dbHandler.collection(profileColl).aggregate([
-        {
-          $match: {$or: [{lastUpdateTimeStamp: {$lt: lastUpdateTimeStamp}},{lastUpdateTimeStamp: {$exists:false}}]},
-        },
-        {
-          $group: {"_id": 0, "id": {$addToSet: "$_id"}},
-        },
-        {
-          $project: {"_id": 0, "id": 1},
         }
-      ]);
-      const resArray = await res.toArray();
-      if (resArray.length === 0)
-        return await getAllProfileIds();
-
-      return resArray[0].id
-      */
+      );
+      return res;
     } catch (e: any) {
       logger.error(`Get not null publication cursor failed, message:${e}`);
       return [];
     }
   }
 
-  const getAllProfileIds = async (): Promise<any> => {
+  const setSyncedBlockNumber = async (blockNumber: number): Promise<void> => {
     try {
-      return await db.dbHandler.collection(profileColl).find({__typename: 'Profile'}).project({_id:1});
+      const query = { _id: 'syncedBlock' };
+      const updateData = { value: blockNumber };
+      const options = { upsert: true }; 
+      await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
     } catch (e: any) {
-      logger.error(`Get all profile id failed, message:${e}`);
-      return [];
+      logger.error(`Update start block number failed, message:${e}`);
     }
   }
 
-  const getLensStats = async (): Promise<any> => {
+  const getSyncedBlockNumber = async (): Promise<number> => {
+    try {
+      const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'syncedBlock'});
+      if (res === null)
+        return -1;
+
+      return res.value;
+    } catch (e: any) {
+      throw new Error(`Get synced block number failed, message:${e}`);
+    }
+  }
+
+  const setStartBlockNumber = async (): Promise<void> => {
+    try {
+      const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'startBlock'});
+      if (res !== null)
+        return;
+
+      const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
+      const startBlockNumber = await provider.getBlockNumber();
+      logger.info(`Set monitor start block number to ${startBlockNumber}`);
+      const query = { _id: 'startBlock' };
+      const updateData = { value: startBlockNumber };
+      const options = { upsert: true }; 
+      await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+    } catch (e: any) {
+      logger.error(`Update start block number failed, message:${e}`);
+    }
+  }
+
+  const getStartBlockNumber = async (): Promise<number> => {
+    try {
+      const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'startBlock'});
+      if (res === null)
+        return -1;
+
+      return res.value;
+    } catch (e: any) {
+      throw new Error(`Get start block number failed, message:${e}`);
+    }
   }
 
   return {
     insertOne,
     insertMany,
+    insertProfiles,
+    insertPublications,
     deleteOne,
     deleteMany,
-    deleteCursor,
+    updateProfile,
     updateProfileCursor,
-    updateProfileCursorAndTime,
     updatePublicationCursor,
-    updateLastUpdateById,
-    updateLastUpdateTimeStamp,
+    isUpdateFinished,
+    setSyncedBlockNumber,
+    setStartBlockNumber,
     getProfileCursor,
     getPublicationCursor,
     getProfileIds,
-    getAllProfileIds,
+    getSyncedBlockNumber,
+    getStartBlockNumber,
   }
 }

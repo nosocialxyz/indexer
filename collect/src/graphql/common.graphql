@@ -335,6 +335,17 @@ fragment NSPostFields on Post {
   referenceModule {
     ...ReferenceModuleFields
   }
+  collectNftAddress
+  isDataAvailability
+  canComment {
+    result
+  }
+  canMirror {
+    result
+  }
+  canDecrypt {
+    result
+  }
   hidden
   reaction(request: null)
   mirrors(by: null)
@@ -406,21 +417,35 @@ fragment NSMirrorFields on Mirror {
     ...MetadataOutputFields
   }
   createdAt
+  onChainContentURI
   collectModule {
     ...CollectModuleFields
   }
   referenceModule {
     ...ReferenceModuleFields
   }
+  collectNftAddress
+  isDataAvailability
   hidden
   reaction(request: null)
   hasCollectedByMe
   isGated
+  canComment {
+    result
+  }
+  canMirror {
+    result
+  }
+  canDecrypt {
+    result
+  }
   mirrorOf {
     ... on Post {
+      __typename
       id
     }
     ... on Comment {
+      __typename
       id
     }
   }
@@ -490,6 +515,7 @@ fragment NSCommentFields on Comment {
   metadata {
     ...MetadataOutputFields
   }
+  onChainContentURI
   createdAt
   collectModule {
     ...CollectModuleFields
@@ -498,15 +524,37 @@ fragment NSCommentFields on Comment {
     ...ReferenceModuleFields
   }
   hidden
+  collectNftAddress
+  isDataAvailability
+  firstComment {
+    id
+  }
   reaction(request: null)
   mirrors(by: null)
   hasCollectedByMe
   isGated
+  canComment {
+    result
+  }
+  canMirror {
+    result
+  }
+  canDecrypt {
+    result
+  }
+  collectedBy {
+    address
+    defaultProfile {
+      id
+    }
+  }
   mainPost {
     ... on Post {
+       __typename
       id
     }
     ... on Mirror {
+       __typename
       id
     }
   }

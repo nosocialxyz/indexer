@@ -16,5 +16,12 @@ export async function queryPublications(request: PublicationsQueryRequest) {
       request,
     },
   });
-  return res.data;
+  const data = res.data;
+  if (data === null || data === undefined)
+    throw ({
+      statusCode: 404,
+      message: `Get publications with request:${request} failed!`,
+    });
+
+  return data;
 };

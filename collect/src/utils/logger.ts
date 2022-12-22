@@ -32,8 +32,8 @@ const defaultLogger = createLogger({
     // - Write all logs error (and below) to `crust-api-error.log`.
     //
     new transports.Console(),
-    new transports.File({ filename: 'crust-api-error.log', level: 'error' }),
-    new transports.File({ filename: 'crust-api-combined.log' }),
+    new transports.File({ filename: 'nosocial-api-error.log', level: 'error' }),
+    new transports.File({ filename: 'nosocial-api-combined.log' }),
   ],
 });
 

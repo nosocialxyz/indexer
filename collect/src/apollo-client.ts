@@ -1,3 +1,4 @@
+import ApolloLinkTimeout from 'apollo-link-timeout';
 import {
   ApolloClient,
   ApolloLink,
@@ -27,6 +28,9 @@ const httpLink = new HttpLink({
   fetch,
 });
 
+const timeoutLink = new ApolloLinkTimeout(60000);
+const timeoutHttpLink = timeoutLink.concat(httpLink);
+
 const errorLink = onError(({ graphQLErrors, networkError }) => {
   if (graphQLErrors)
     graphQLErrors.forEach(({ message, locations, path }) =>
@@ -53,7 +57,7 @@ const authLink = new ApolloLink((operation, forward) => {
 });
 
 export const apolloClient = new ApolloClient({
-  link: from([errorLink, authLink, httpLink]),
+  link: from([errorLink, authLink, timeoutHttpLink]),
   cache: new InMemoryCache(),
   defaultOptions: defaultOptions,
 });

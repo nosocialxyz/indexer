@@ -7,7 +7,8 @@ import { loadDB, closeAllDB } from './db';
 import { DBNAME } from './config';
 import { AppContext } from './types/context.d';
 import { timeout } from "./utils/promise-utils";
-import { monitorLensContract } from "./tasks/monitor-ploygon";
+import { monitorLensContract } from "./tasks/monitor";
+import { createChildLoggerWith } from "./utils/logger";
 
 const MaxTickTimout = 15 * 1000;
 const MaxNoNewBlockDuration = Dayjs.duration({
@@ -21,12 +22,16 @@ async function main() {
 
   const context: AppContext = {
     database: db,
+    logger: logger,
   }
-  const tasks = await loadTasks(context);
 
   try {
-    _.forEach(tasks, (t: any) => t.start());
-    monitorLensContract();
+    //_.forEach(tasks, (t: any) => t.start());
+    const tasks = await loadTasks(context);
+    //monitorLensContract({
+    //  database:context.database,
+    //  logger:createChildLoggerWith({moduleId:'monitor'},context.logger)
+    //});
     await doEventLoop();
   } catch(e) {
     logger.error(`unexpected error occurs, message:${e}`);
@@ -34,11 +39,11 @@ async function main() {
   } finally {
     await timeout(closeAllDB(), 5 * 1000, null);
     logger.info('stopping tasks');
-    await timeout(
-      Bluebird.map(tasks, (t: any) => t.stop()),
-      5 * 1000,
-      [],
-    );
+    //await timeout(
+    //  Bluebird.map(tasks, (t: any) => t.stop()),
+    //  5 * 1000,
+    //  [],
+    //);
   }
 }
 
