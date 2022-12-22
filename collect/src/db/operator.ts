@@ -208,6 +208,25 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
+  const getStatus = async (): Promise<any> => {
+    try {
+      const profileStats = await db.dbHandler.collection(PROFILE_COLL).stats({scale:1024});
+      const publicationStats = await db.dbHandler.collection(PUBLICATION_COLL).stats({scale:1024});
+      return {
+        profile: {
+          count: profileStats.count,
+          size: profileStats.size,
+        },
+        publication: {
+          count: publicationStats.count,
+          size: publicationStats.size,
+        },
+      };
+    } catch (e: any) {
+      throw new Error(`Get status failed, error:${e}`);
+    }
+  }
+
   return {
     insertOne,
     insertMany,
@@ -226,5 +245,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
     getProfileIds,
     getSyncedBlockNumber,
     getStartBlockNumber,
+    getStatus,
   }
 }

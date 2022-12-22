@@ -55,7 +55,7 @@ async function getPublication(context: AppContext, id: string) {
         await Bluebird.delay(5 * 60 * 1000);
     }
   }
-  logger.info(`id:${id},cursor:${cursor} done.`);
+  //logger.info(`id:${id},cursor:${cursor} done.`);
 }
 
 export async function createPublicationTask(context: AppContext) {

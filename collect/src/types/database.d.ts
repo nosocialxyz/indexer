@@ -16,4 +16,5 @@ export interface DbOperator {
   getProfileIds: () => Promise<any>;
   getSyncedBlockNumber: () => Promise<number>;
   getStartBlockNumber: () => Promise<number>;
+  getStatus: () => Promise<any>;
 }

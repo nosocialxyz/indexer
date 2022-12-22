@@ -1,9 +1,11 @@
 import { PORT } from '../config';
 import { AppContext } from '../types/context.d';
+import { createDBOperator } from '../db/operator';
 
 const http = require('http');
 
 export async function createAPI(context: AppContext) {
+  const dbOperator = createDBOperator(context.database);
   const logger = context.logger;
   const server = http.createServer();
 
@@ -11,7 +13,6 @@ export async function createAPI(context: AppContext) {
     let url = new URL(req.url, `http://${req.headers.host}`)
     let resCode = 200
     let resBody = {}
-    let resMsg = ''
     const restfulHead = '/api/v0'
     const reqHead = url.pathname.substr(0, restfulHead.length)
     if (reqHead !== restfulHead) {
@@ -26,11 +27,13 @@ export async function createAPI(context: AppContext) {
     const route = url.pathname.substr(restfulHead.length);
     if (req.method === 'GET') {
       // Do GET request
-      if ('/lens/stats' === route) {
-        const status = url.searchParams.get('status') || '';
-        const chainType = url.searchParams.get('chainType') || '';
+      if ('/stats' === route) {
+        //const status = url.searchParams.get('status') || '';
+        //const chainType = url.searchParams.get('chainType') || '';
+        resBody = await dbOperator.getStatus();
+        resCode = 200;
       } else {
-        resMsg = `Unknown request:${url.pathname}`;
+        resBody = `Unknown request:${url.pathname}`;
         resCode = 404;
       }
     } else if (req.method === 'POST') {
@@ -38,7 +41,7 @@ export async function createAPI(context: AppContext) {
       if ('/get/profiles' === route) {
       } else if ('/get/publications' === route) {
       } else {
-        resMsg = `Unknown request:${url.pathname}`;
+        resBody = `Unknown request:${url.pathname}`;
         resCode = 404;
       }
     } else {
