@@ -22,6 +22,10 @@ async function getPublication(context: AppContext, id: string) {
   let cursor = await dbOperator.getPublicationCursor(id);
   while (true) {
     try {
+      // check if stop
+      if (await dbOperator.getStop())
+        break;
+
       await Bluebird.delay(randomRange(1, 5) * 1000);
       const res = await queryPublications({
         profileId: id,
@@ -62,6 +66,7 @@ export async function createPublicationTask(context: AppContext) {
   const logger = context.logger;
   logger.info('start get publications');
   const dbOperator = await createDBOperator(context.database);
+  await dbOperator.incTask();
   while (true) {
     try {
       const isFinished = await dbOperator.isUpdateFinished();
@@ -69,25 +74,31 @@ export async function createPublicationTask(context: AppContext) {
       let idArray: string[] = [];
       while (await ids.hasNext()) {
         idArray.push((await ids.next())._id);
-        if (idArray.length >= 10000) {
-          logger.info(`profile num:${idArray.length}`)
+        if (idArray.length >= LENS_DATA_LIMIT) {
           await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
           idArray = [];
         }
+        // check if stop
+        if (await dbOperator.getStop()) {
+          logger.info('Stop publication task.');
+          await dbOperator.decTask();
+          return;
+        }
       }
       if (idArray.length > 0) {
-        logger.info(`profile num:${idArray.length}`)
         await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
       }
-      if (isFinished)
+      if (isFinished) {
+        logger.info('Update publications complete.');
         break;
+      }
 
       await Bluebird.delay(3 * 1000);
     } catch (e: any) {
       logger.error(e);
     }
   }
-  logger.info('Update publications complete.');
+  await dbOperator.decTask();
 }
 
 export async function updatePublications(context: AppContext) {
@@ -99,14 +110,17 @@ export async function updatePublications(context: AppContext) {
     let idArray: string[] = [];
     while (await ids.hasNext()) {
       idArray.push((await ids.next())._id);
-      if (idArray.length >= 10000) {
-        logger.info(`profile num:${idArray.length}`)
+      if (idArray.length >= LENS_DATA_LIMIT) {
         await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
         idArray = [];
       }
+      // check if stop
+      if (await dbOperator.getStop()) {
+        logger.info('Stop update publication task.');
+        return;
+      }
     }
     if (idArray.length > 0) {
-      logger.info(`profile num:${idArray.length}`)
       await Bluebird.map(idArray, (id: any) => getPublication(context, id), { concurrency : maxTaskNum })
     }
   } catch (e: any) {

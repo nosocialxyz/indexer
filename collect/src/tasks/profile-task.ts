@@ -17,6 +17,8 @@ export async function createProfileTask(context: AppContext) {
   const logger = context.logger;
   logger.info('Start get profiles.');
   const dbOperator = await createDBOperator(context.database);
+  // Add task
+  await dbOperator.incTask();
   let cursor = await dbOperator.getProfileCursor();
   while (true) {
     try {
@@ -28,14 +30,25 @@ export async function createProfileTask(context: AppContext) {
         limit: LENS_DATA_LIMIT,
       })
 
-      if (res.items.length > 0)
-        await dbOperator.insertProfiles(res.items);
+      if (res.items.length > 0) {
+        for (const profile of res.items) {
+          await dbOperator.insertProfile(profile);
+        }
+        //await dbOperator.insertProfiles(res.items);
+      }
 
       // Update cursor for unexpected crash
       cursor = res.pageInfo.next;
       await dbOperator.updateProfileCursor(cursor);
       if (res.items.length < LENS_DATA_LIMIT) {
         await dbOperator.updateProfileCursor(cursor, 'complete');
+        logger.info('Profiles sync is complete.');
+        break;
+      }
+
+      // check if stop
+      if (await dbOperator.getStop()) {
+        logger.info('Stop profile task.');
         break;
       }
     } catch(e: any) {
@@ -44,5 +57,6 @@ export async function createProfileTask(context: AppContext) {
         await Bluebird.delay(5 * 60 * 1000);
     }
   }
-  logger.info('Profiles sync is complete.');
+  // Remove task
+  await dbOperator.decTask();
 }

@@ -4,6 +4,7 @@ import _ from 'lodash';
 import { Dayjs } from './utils/datetime';
 import { logger } from './utils/logger';
 import { loadDB, closeAllDB } from './db';
+import { createDBOperator } from './db/operator';
 import { DBNAME } from './config';
 import { AppContext } from './types/context.d';
 import { timeout } from "./utils/promise-utils";
@@ -25,20 +26,25 @@ async function main() {
     logger: logger,
   }
 
+  // Reset stop and task flag
+  const dbOperator = createDBOperator(context.database);
+  await dbOperator.setStop(false);
+  await dbOperator.setTask(0);
+
   try {
     //_.forEach(tasks, (t: any) => t.start());
     const tasks = await loadTasks(context);
-    //monitorLensContract({
-    //  database:context.database,
-    //  logger:createChildLoggerWith({moduleId:'monitor'},context.logger)
-    //});
-    await doEventLoop();
+    monitorLensContract({
+      database:context.database,
+      logger:createChildLoggerWith({moduleId:'monitor'},context.logger)
+    });
+    await doEventLoop(context);
   } catch(e) {
     logger.error(`unexpected error occurs, message:${e}`);
     throw e;
   } finally {
     await timeout(closeAllDB(), 5 * 1000, null);
-    logger.info('stopping tasks');
+    //logger.info('stopping tasks');
     //await timeout(
     //  Bluebird.map(tasks, (t: any) => t.stop()),
     //  5 * 1000,
@@ -47,10 +53,15 @@ async function main() {
   }
 }
 
-async function doEventLoop(): Promise<void> {
+async function doEventLoop(context: AppContext): Promise<void> {
   logger.info('running event loop');
+  const dbOperator = createDBOperator(context.database);
   do {
     await Bluebird.delay(10 * 1000);
+    if (await dbOperator.getTask() <= 0) {
+      logger.info('Stop main loop, process will exit.');
+      break;
+    }
   } while (true); // eslint-disable-line
 }
 

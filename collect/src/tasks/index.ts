@@ -9,9 +9,9 @@ import { createChildLoggerWith } from "../utils/logger";
 export async function loadTasks(context: AppContext) {
   const db = context.database;
   const dbOperator = await createDBOperator(db);
-  const syncedBlock = await dbOperator.getSyncedBlockNumber();
-  if (syncedBlock > 0)
-    return;
+  //const syncedBlock = await dbOperator.getSyncedBlockNumber();
+  //if (syncedBlock > 0)
+  //  return;
 
   await dbOperator.setStartBlockNumber();
   let tasks = [
@@ -20,7 +20,7 @@ export async function loadTasks(context: AppContext) {
       task: createAPI,
     },
     {
-      name: 'explore:profiles',
+      name: 'get:profiles',
       task: createProfileTask,
     },
     {

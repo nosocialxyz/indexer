@@ -81,6 +81,7 @@ export const DBNAME = 'test';
 export const PROFILE_COLL = 'profile';
 export const PUBLICATION_COLL = 'publication';
 export const CURSOR_COLL = 'cursor';
+export const WHITELIST_COLL = 'whitelist';
 
 //export const POLYGON_ENDPOINT = "https://billowing-silent-friday.matic.discover.quiknode.pro/1d4fafb9f0722f3d64de51b10ab032bc0b1da6ee/";
 export const POLYGON_ENDPOINT = "https://polygon-rpc.com/";

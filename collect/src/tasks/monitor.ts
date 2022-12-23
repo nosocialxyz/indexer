@@ -30,6 +30,9 @@ export async function monitorLensContract(context: AppContext) {
     }
   }
 
+  // Add task
+  await dbOperator.incTask();
+
   const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
   const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
   const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
@@ -70,23 +73,40 @@ export async function monitorLensContract(context: AppContext) {
       profileIds = Array.from(new Set(profileIds));
       logger.info(`Get new profile number:${profileIds.length}`);
       await updateProfilesAndPublications(context, profileIds);
-      fromBlock = toBlock;
       await dbOperator.setSyncedBlockNumber(toBlock);
+      fromBlock = toBlock;
     } catch (e: any) {
       logger.error(`Get logs from polychain failed,error:${e}.`);
     }
 
+    try {
+      // Update white list
+      const whitelistIds = await dbOperator.getWhiteList();
+      await updateProfilesAndPublications(context, whitelistIds);
+    } catch (e: any) {
+      logger.error(`Update white list failed, error:${e}`);
+    }
+
+    // check if stop
+    if (await dbOperator.getStop()) {
+      logger.info('Stop monitor task.');
+      break;
+    }
+
     await Bluebird.delay(15 * 1000);
   }
+
+  // Remove task
+  await dbOperator.decTask();
 }
 
 async function updateProfilesAndPublications(context: AppContext, profileIds: string[]) {
   const logger = context.logger;
   const db = context.database;
-  const dbOperator = await createDBOperator(db);
+  const dbOperator = createDBOperator(db);
   let cursor = '{}';
   let offset = 0;
-  while (true) {
+  while (offset < profileIds.length) {
     try {
       await Bluebird.delay(1 * 1000);
       const res = await getProfiles({
@@ -104,8 +124,6 @@ async function updateProfilesAndPublications(context: AppContext, profileIds: st
 
       cursor = res.pageInfo.next;
       offset = offset + LENS_DATA_LIMIT;
-      if (offset >= profileIds.length)
-        break;
     } catch (e: any) {
       logger.error(`Get profiles failed,error:${e}`);
       if (e.statusCode === 404)
