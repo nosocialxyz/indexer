@@ -39,6 +39,10 @@ export async function monitorLensContract(context: AppContext) {
   while (true) {
     let toBlock = fromBlock + 1000;
     logger.info(`from:${fromBlock}, to:${toBlock}`)
+    const startBlockNumber = await provider.getBlockNumber();
+    if (toBlock > startBlockNumber) {
+      toBlock = startBlockNumber;
+    }
     const lensHubFilter = {
       address: LENS_HUB_CONTRACT,
       topics: [
