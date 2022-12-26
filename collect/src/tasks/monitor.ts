@@ -72,7 +72,13 @@ export async function monitorLensContract(context: AppContext) {
       const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
       for (const log of lensPeripheryLogs) {
         const event = lensPeripheryIface.parseLog(log);
-        profileIds.push(event.args.profileId._hex)
+        if (event.args.hasOwnProperty('profileId')) {
+          profileIds.push(event.args.profileId._hex)
+        } else if (event.args.hasOwnProperty('profileIds')) {
+          for (const id of event.args.profileIds) {
+            profileIds.push(id._hex)
+          }
+        }
       }
       profileIds = Array.from(new Set(profileIds));
       logger.info(`Get new profile number:${profileIds.length}`);
