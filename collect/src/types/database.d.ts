@@ -1,6 +1,8 @@
 export interface DbOperator {
   insertOne: (collName: string, data: any) => Promise<void>;
   insertMany: (collName: string, data: any) => Promise<void>;
+  insertWhitelist: (data: any) => Promise<any>;
+  insertWhitelists: (data: any) => Promise<any>;
   insertProfile: (data: any) => Promise<any>;
   insertProfiles: (data: any) => Promise<any>;
   insertPublications: (data: any) => Promise<void>;

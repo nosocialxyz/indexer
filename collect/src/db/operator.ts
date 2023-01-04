@@ -29,6 +29,24 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
+  const insertWhitelist = async (data: any): Promise<any> => {
+    try {
+      return await db.dbHandler.collection(WHITELIST_COLL).insertOne(data);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert whitelist failed, message:${e}`);
+    }
+  }
+
+  const insertWhitelists = async (data: any): Promise<any> => {
+    try {
+      return await db.dbHandler.collection(WHITELIST_COLL).insertMany(data);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert whitelists failed, message:${e}`);
+    }
+  }
+
   const insertProfile = async (data: any): Promise<any> => {
     try {
       return await db.dbHandler.collection(PROFILE_COLL).insertOne(data);
@@ -240,6 +258,8 @@ export function createDBOperator(db: MongoDB): DbOperator {
   return {
     insertOne,
     insertMany,
+    insertWhitelist,
+    insertWhitelists,
     insertProfile,
     insertProfiles,
     insertPublications,

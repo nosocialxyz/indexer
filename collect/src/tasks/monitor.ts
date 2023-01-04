@@ -89,14 +89,6 @@ export async function monitorLensContract(context: AppContext) {
       logger.error(`Get logs from polychain failed,error:${e}.`);
     }
 
-    try {
-      // Update white list
-      const whitelistIds = await dbOperator.getWhiteList();
-      await updateProfilesAndPublications(context, whitelistIds);
-    } catch (e: any) {
-      logger.error(`Update white list failed, error:${e}`);
-    }
-
     // check if stop
     if (await dbOperator.getStop()) {
       logger.info('Stop monitor task.');

@@ -4,6 +4,7 @@ import { createAPI } from "./api-task";
 import { createDBOperator } from '../db/operator';
 import { createProfileTask } from "./profile-task";
 import { createPublicationTask } from "./publication-task";
+import { createUpdateTask } from "./update-task";
 import { createChildLoggerWith } from "../utils/logger";
 
 export async function loadTasks(context: AppContext) {
@@ -27,11 +28,16 @@ export async function loadTasks(context: AppContext) {
       name: 'get:publications',
       task: createPublicationTask,
     },
+    {
+      name: 'update:whitelist',
+      task: createUpdateTask,
+    }
   ];
   await Bluebird.map(tasks, async (task: any) => {
     context.logger = createChildLoggerWith({
       moduleId: task.name,
     },context.logger);
-    await task.task(context);
+    //await task.task(context);
+    task.task(context);
   });
 }

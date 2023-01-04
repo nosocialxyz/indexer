@@ -4,6 +4,7 @@ import { AppContext } from '../types/context.d';
 import { DbOperator } from '../types/database.d';
 import { BaseResponse } from '../types/api.d';
 import { createDBOperator } from '../db/operator';
+import * as api from '../requests';
 
 const http = require('http');
 
@@ -35,8 +36,6 @@ export async function createAPI(context: AppContext) {
     if (req.method === 'GET') {
       // Do GET request
       if ('/stats' === route) {
-        //const status = url.searchParams.get('status') || '';
-        //const chainType = url.searchParams.get('chainType') || '';
         resBody = await dbOperator.getStatus();
         resCode = 200;
       } else {
@@ -49,7 +48,15 @@ export async function createAPI(context: AppContext) {
     } else if (req.method === 'POST') {
       // Do POST request
       if ('/stop' === route) {
-        resBody = await stopTasks(dbOperator);
+        resBody = await api.stopTasks(dbOperator);
+        resCode = resBody.statusCode;
+      } else if ('/whitelist/add' === route) {
+        const profileId = url.searchParams.get('address') || '';
+        resBody = await api.addWhitelist(dbOperator, profileId);
+        resCode = resBody.statusCode;
+      } else if ('/profile/add' === route) {
+        const profileId = url.searchParams.get('id') || '';
+        resBody = await api.addProfile(dbOperator, profileId);
         resCode = resBody.statusCode;
       } else {
         resBody = {
@@ -74,19 +81,4 @@ export async function createAPI(context: AppContext) {
   });
   server.listen(PORT, '0.0.0.0');
   logger.info(`Start api on port:${PORT} successfully`)
-}
-
-async function stopTasks(dbOperator: DbOperator): Promise<BaseResponse> {
-  try {
-    await dbOperator.setStop(true);
-    return {
-      statusCode: 200,
-      message: 'Set '
-    };
-  } catch (e: any) {
-    return {
-      statusCode: 500,
-      message: `Internal error,${e}`,
-    };
-  }
 }
