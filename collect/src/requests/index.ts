@@ -18,7 +18,7 @@ export async function addWhitelist(dbOperator: DbOperator, address: string) {
 
 export async function stopTasks(dbOperator: DbOperator): Promise<BaseResponse> {
   try {
-    await dbOperator.setStop(true);
+    await dbOperator.setStop();
     return {
       statusCode: 200,
       message: 'Set '

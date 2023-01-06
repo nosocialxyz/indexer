@@ -5,58 +5,53 @@ import { createDBOperator } from '../db/operator';
 import { makeIntervalTask } from './task-utils';
 import { Task } from '../types/tasks.d';
 import { AppContext } from '../types/context.d';
-import { logger } from '../utils/logger';
+import { Logger } from 'winston';
+import { SimpleTask } from '../types/tasks.d';
+import { IsStopped } from './task-utils';
 import { LENS_DATA_LIMIT } from '../config';
-import Lock from '../utils/lock';
 
-const sharedBuffer = new SharedArrayBuffer(1 * Int32Array.BYTES_PER_ELEMENT);
-const sharedArray = new Int32Array(sharedBuffer);
-const lock = new Lock(sharedArray, 0);
-
-export async function createProfileTask(context: AppContext) {
-  const logger = context.logger;
-  logger.info('Start get profiles.');
-  const dbOperator = await createDBOperator(context.database);
-  // Add task
-  await dbOperator.incTask();
-  let cursor = await dbOperator.getProfileCursor();
-  while (true) {
-    try {
-      // Sleep for rate limit
-      await Bluebird.delay(1 * 1000);
-      const res = await exploreProfiles({
-        sortCriteria: ProfileSortCriteria.MostFollowers,
-        cursor: cursor,
-        limit: LENS_DATA_LIMIT,
-      })
-
-      if (res.items.length > 0) {
-        for (const profile of res.items) {
-          await dbOperator.insertProfile(profile);
-        }
-        //await dbOperator.insertProfiles(res.items);
-      }
-
-      // Update cursor for unexpected crash
-      cursor = res.pageInfo.next;
-      await dbOperator.updateProfileCursor(cursor);
-      if (res.items.length < LENS_DATA_LIMIT) {
-        await dbOperator.updateProfileCursor(cursor, 'complete');
-        logger.info('Profiles sync is complete.');
-        break;
-      }
-
-      // check if stop
-      if (await dbOperator.getStop()) {
-        logger.info('Stop profile task.');
-        break;
-      }
-    } catch(e: any) {
-      logger.error(`Get profile error, error:${e}`);
-      if (e.networkError.statusCode === 429)
-        await Bluebird.delay(5 * 60 * 1000);
+async function handleProfiles(
+  context: AppContext,
+  logger: Logger,
+  _isStopped: IsStopped,
+): Promise<void> {
+  try {
+    const dbOperator = createDBOperator(context.database);
+    let cursor = await dbOperator.getProfileCursor();
+    const res = await exploreProfiles({
+      sortCriteria: ProfileSortCriteria.CreatedOn,
+      cursor: cursor,
+      limit: LENS_DATA_LIMIT,
+    })
+    if (res.items.length > 0) {
+      await dbOperator.insertProfiles(res.items);
     }
+    // Update cursor for unexpected crash
+    cursor = res.pageInfo.next;
+    await dbOperator.updateProfileCursor(cursor);
+    if (res.items.length < LENS_DATA_LIMIT) {
+      //await dbOperator.updateProfileCursor(cursor, 'complete');
+      logger.info('Profiles sync is complete.');
+    }
+  } catch(e: any) {
+    logger.error(`Get profile error, error:${e}`);
+    if (e.networkError.statusCode === 429)
+      await Bluebird.delay(5 * 60 * 1000);
   }
-  // Remove task
-  await dbOperator.decTask();
+}
+
+export async function createProfileTask(
+  context: AppContext,
+  loggerParent: Logger,
+): Promise<SimpleTask> {
+  const interval = 5 * 1000;
+  return makeIntervalTask(
+    0,
+    interval,
+    'explore-profiles',
+    context,
+    loggerParent,
+    handleProfiles,
+    '🧑',
+  );
 }

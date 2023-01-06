@@ -8,14 +8,11 @@ import * as api from '../requests';
 
 const http = require('http');
 
-export async function createAPI(context: AppContext) {
+export async function startAPI(context: AppContext) {
   const dbOperator = createDBOperator(context.database);
   const logger = context.logger;
   const server = http.createServer();
   const httpTerminator = createHttpTerminator({server});
-
-  // Add task
-  await dbOperator.incTask();
 
   server.on('request', async(req: any, res: any) => {
     let url = new URL(req.url, `http://${req.headers.host}`)
@@ -74,8 +71,6 @@ export async function createAPI(context: AppContext) {
     // Check stop
     if (await dbOperator.getStop()) {
       logger.info('Stop api.');
-      // Remove task
-      await dbOperator.decTask();
       await httpTerminator.terminate();
     }
   });

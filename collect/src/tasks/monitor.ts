@@ -4,7 +4,10 @@ import { AppContext } from '../types/context.d';
 import { DbOperator } from '../types/database.d';
 import { createDBOperator } from '../db/operator';
 import { getProfiles } from '../operation';
-import { updatePublications } from './publication-task';
+import { makeIntervalTask } from './task-utils';
+import { Logger } from 'winston';
+import { SimpleTask } from '../types/tasks.d';
+import { IsStopped } from './task-utils';
 import {
   LENS_DATA_LIMIT,
   LENS_HUB_CONTRACT,
@@ -17,11 +20,13 @@ import {
 } from '../config';
 
 
-export async function monitorLensContract(context: AppContext) {
-  const logger = context.logger;
-  logger.info('monitor lens protocol');
+export async function handleMonitor(
+  context: AppContext,
+  logger: Logger,
+  _isStopped: IsStopped,
+): Promise<void> {
   const db = context.database;
-  const dbOperator = await createDBOperator(db);
+  const dbOperator = createDBOperator(db);
   let fromBlock = await dbOperator.getSyncedBlockNumber();
   if (fromBlock === -1) {
     fromBlock = await dbOperator.getStartBlockNumber();
@@ -30,18 +35,16 @@ export async function monitorLensContract(context: AppContext) {
     }
   }
 
-  // Add task
-  await dbOperator.incTask();
-
   const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
   const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
   const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
-  while (true) {
-    let toBlock = fromBlock + 1000;
-    logger.info(`from:${fromBlock}, to:${toBlock}`)
-    const startBlockNumber = await provider.getBlockNumber();
-    if (toBlock > startBlockNumber) {
-      toBlock = startBlockNumber;
+  let toBlock = fromBlock + 1000;
+  logger.info(`from:${fromBlock}, to:${toBlock}`)
+
+  try {
+    const currentBlockNumber = await provider.getBlockNumber();
+    if (toBlock > currentBlockNumber) {
+      toBlock = currentBlockNumber;
     }
     const lensHubFilter = {
       address: LENS_HUB_CONTRACT,
@@ -60,49 +63,51 @@ export async function monitorLensContract(context: AppContext) {
       toBlock: toBlock,
     }
 
-    try {
-      let profileIds: string[] = [];
-      // Get lens hub logs
-      const lensHubLogs = await provider.getLogs(lensHubFilter);
-      for (const log of lensHubLogs) {
-        const event = lensHubIface.parseLog(log);
+    let profileIds: string[] = [];
+    // Get lens hub logs
+    const lensHubLogs = await provider.getLogs(lensHubFilter);
+    for (const log of lensHubLogs) {
+      const event = lensHubIface.parseLog(log);
+      profileIds.push(event.args.profileId._hex)
+    }
+    // Get lens periphery logs
+    const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
+    for (const log of lensPeripheryLogs) {
+      const event = lensPeripheryIface.parseLog(log);
+      if (event.args.hasOwnProperty('profileId')) {
         profileIds.push(event.args.profileId._hex)
-      }
-      // Get lens periphery logs
-      const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
-      for (const log of lensPeripheryLogs) {
-        const event = lensPeripheryIface.parseLog(log);
-        if (event.args.hasOwnProperty('profileId')) {
-          profileIds.push(event.args.profileId._hex)
-        } else if (event.args.hasOwnProperty('profileIds')) {
-          for (const id of event.args.profileIds) {
-            profileIds.push(id._hex)
-          }
+      } else if (event.args.hasOwnProperty('profileIds')) {
+        for (const id of event.args.profileIds) {
+          profileIds.push(id._hex)
         }
       }
-      profileIds = Array.from(new Set(profileIds));
-      logger.info(`Get new profile number:${profileIds.length}`);
-      await updateProfilesAndPublications(context, profileIds);
-      await dbOperator.setSyncedBlockNumber(toBlock);
-      fromBlock = toBlock;
-    } catch (e: any) {
-      logger.error(`Get logs from polychain failed,error:${e}.`);
     }
-
-    // check if stop
-    if (await dbOperator.getStop()) {
-      logger.info('Stop monitor task.');
-      break;
-    }
-
-    await Bluebird.delay(15 * 1000);
+    profileIds = Array.from(new Set(profileIds));
+    logger.info(`Get new profile number:${profileIds.length}`);
+    await updateProfiles(context, profileIds);
+    await dbOperator.setSyncedBlockNumber(toBlock);
+  } catch (e: any) {
+    logger.error(`Get logs from polychain failed,error:${e}.`);
   }
-
-  // Remove task
-  await dbOperator.decTask();
 }
 
-async function updateProfilesAndPublications(context: AppContext, profileIds: string[]) {
+export async function createMonitorTask(
+  context: AppContext,
+  loggerParent: Logger,
+): Promise<SimpleTask> {
+  const interval = 5 * 1000;
+  return makeIntervalTask(
+    0,
+    interval,
+    'monitor-chain',
+    context,
+    loggerParent,
+    handleMonitor,
+    '👀',
+  )
+}
+
+async function updateProfiles(context: AppContext, profileIds: string[]) {
   const logger = context.logger;
   const db = context.database;
   const dbOperator = createDBOperator(db);
@@ -111,20 +116,21 @@ async function updateProfilesAndPublications(context: AppContext, profileIds: st
   while (offset < profileIds.length) {
     try {
       await Bluebird.delay(1 * 1000);
-      const res = await getProfiles({
+      const profiles = await getProfiles({
         profileIds: profileIds.slice(offset,offset+LENS_DATA_LIMIT),
         limit: LENS_DATA_LIMIT,
         cursor: cursor,
       })
 
-      await Bluebird.map(res.items, async (profile: any) => {
-        await dbOperator.updateProfile(profile);
-      })
+      if (profiles.items.length > 0) {
+        await dbOperator.insertProfiles(profiles.items);
+      }
 
-      if (res.items.length < LENS_DATA_LIMIT)
+      if (profiles.items.length < LENS_DATA_LIMIT) {
         break;
+      }
 
-      cursor = res.pageInfo.next;
+      cursor = profiles.pageInfo.next;
       offset = offset + LENS_DATA_LIMIT;
     } catch (e: any) {
       logger.error(`Get profiles failed,error:${e}`);
@@ -135,5 +141,4 @@ async function updateProfilesAndPublications(context: AppContext, profileIds: st
         await Bluebird.delay(5 * 60 * 1000);
     }
   }
-  await updatePublications(context);
 }

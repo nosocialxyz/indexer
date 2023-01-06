@@ -1,38 +1,32 @@
 import Bluebird from 'bluebird';
 import { AppContext } from "../types/context.d";
-import { createAPI } from "./api-task";
+import { SimpleTask } from '../types/tasks.d';
+import { createChildLogger } from '../utils/logger';
 import { createDBOperator } from '../db/operator';
 import { createProfileTask } from "./profile-task";
 import { createPublicationTask } from "./publication-task";
 import { createUpdateTask } from "./update-task";
+import { createMonitorTask } from "./monitor";
 import { createChildLoggerWith } from "../utils/logger";
 
-export async function loadTasks(context: AppContext) {
+export async function createSimpleTasks(
+  context: AppContext
+): Promise<SimpleTask[]> {
   const db = context.database;
-  const dbOperator = await createDBOperator(db);
-  //const syncedBlock = await dbOperator.getSyncedBlockNumber();
-  //if (syncedBlock > 0)
-  //  return;
-
+  const dbOperator = createDBOperator(db);
   await dbOperator.setStartBlockNumber();
+
+  const logger = createChildLogger({ moduleId: 'simple-tasks' });
   let tasks = [
-    {
-      name: 'api',
-      task: createAPI,
-    },
-    {
-      name: 'get:profiles',
-      task: createProfileTask,
-    },
-    {
-      name: 'get:publications',
-      task: createPublicationTask,
-    },
-    {
-      name: 'update:whitelist',
-      task: createUpdateTask,
-    }
+    createProfileTask,
+    createPublicationTask,
+    createUpdateTask,
+    createMonitorTask,
   ];
+  return Bluebird.mapSeries(tasks, (t) => {
+    return t(context, logger);
+  });
+  /*
   await Bluebird.map(tasks, async (task: any) => {
     context.logger = createChildLoggerWith({
       moduleId: task.name,
@@ -40,4 +34,5 @@ export async function loadTasks(context: AppContext) {
     //await task.task(context);
     task.task(context);
   });
+  */
 }

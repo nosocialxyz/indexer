@@ -45,28 +45,29 @@ export async function getProfiles(request: ProfileQueryRequest) {
   return data;
 }
 
-export async function getProfilesByAddress(address: string): Promise<string[]> {
+export async function getProfilesByAddress(address: string): Promise<any[]> {
+  return await getProfilesByAddresses([address]);
+}
+
+export async function getProfilesByAddresses(addresses: string[]): Promise<any[]> {
   let cursor = '{}';
   const res: any[] = [];
-  while (true) {
+  let offset = 0;
+  while (offset < addresses.length) {
     try {
       const profiles = await getProfiles({
-        ownedBy: [address],
+        ownedBy: addresses.slice(offset, offset+LENS_DATA_LIMIT),
         limit: LENS_DATA_LIMIT,
         cursor: cursor,
       })
-      if (profiles.items.length > 0) {
-        for (const profile of profiles.items) {
-          res.push({_id:profile._id, address:address});
-        }
-      }
-
-      if (profiles.items.length < LENS_DATA_LIMIT)
-        break;
-
+      res.push(...profiles.items);
       cursor = profiles.pageInfo.next;
+      if (profiles.items.length < LENS_DATA_LIMIT) {
+        cursor = '{}';
+        offset += LENS_DATA_LIMIT;
+      }
     } catch (e: any) {
-      logger.error(`Get profile by address:${address} failed, error:${e}`);
+      logger.error(`Get profile by addresses failed, error:${e}`);
       if (e.networkError.statusCode === 429)
         await Bluebird.delay(5 * 60 * 1000);
     }

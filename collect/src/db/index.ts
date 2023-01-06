@@ -1,7 +1,7 @@
+import Bluebird from 'bluebird';
 import { MongoClient } from "mongodb";
 import { mongoServURI } from "../config";
 import { logger } from "../utils/logger";
-import { sleep } from '../utils';
 
 const dbPools = new Map<string,MongoDB>();
 
@@ -24,7 +24,7 @@ export async function loadDB(dbName: string): Promise<MongoDB|null> {
 }
 
 export async function closeAllDB() {
-  await sleep(3000);
+  await Bluebird.delay(3 * 1000);
   for (const db of dbPools.values()) {
     await db.disconnect();
   }
