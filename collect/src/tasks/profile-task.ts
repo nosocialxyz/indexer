@@ -23,19 +23,19 @@ async function handleProfiles(
       cursor: cursor,
       limit: LENS_DATA_LIMIT,
     })
-    if (res.items.length > 0) {
-      await dbOperator.insertProfiles(res.items);
-    }
+    await dbOperator.insertProfiles(res.items);
     // Update cursor for unexpected crash
     cursor = res.pageInfo.next;
-    await dbOperator.updateProfileCursor(cursor);
-    if (res.items.length < LENS_DATA_LIMIT) {
-      //await dbOperator.updateProfileCursor(cursor, 'complete');
-      logger.info('Profiles sync is complete.');
+    if (cursor !== null) {
+      await dbOperator.updateProfileCursor(cursor);
     }
+    //if (res.items.length < LENS_DATA_LIMIT) {
+    //  //await dbOperator.updateProfileCursor(cursor, 'complete');
+    //  logger.info(`No more profiles.`);
+    //}
   } catch(e: any) {
     logger.error(`Get profile error, error:${e}`);
-    if (e.networkError.statusCode === 429)
+    if (e.networkError && e.networkError.statusCode === 429)
       await Bluebird.delay(5 * 60 * 1000);
   }
 }

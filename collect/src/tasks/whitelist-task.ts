@@ -10,7 +10,7 @@ import { Logger } from 'winston';
 import { MAX_TASK } from '../config';
 import { getTimestamp } from '../utils';
 
-export async function handleUpdate(
+export async function handleWhitelist(
   context: AppContext,
   logger: Logger,
   isStopped: IsStopped,
@@ -25,13 +25,13 @@ export async function handleUpdate(
       if (!isStopped()) {
         await getPublication(context, _id);
       }
-    }, { concurrency: MAX_TASK });
+    }, { concurrency: MAX_TASK/2 });
   } catch (e: any) {
     logger.error(`Update white list failed, error:${e}`);
   }
 }
 
-export async function createUpdateTask(
+export async function createWhitelistTask(
   context: AppContext,
   loggerParent: Logger,
 ): Promise<SimpleTask> {
@@ -42,7 +42,7 @@ export async function createUpdateTask(
     'update-whitelist',
     context,
     loggerParent,
-    handleUpdate,
+    handleWhitelist,
     '🎉',
   );
 }

@@ -18,10 +18,14 @@ import os from 'os';
 
 //const maxTaskNum = os.cpus().length;
 
-export async function getPublication(context: AppContext, id: string) {
+export async function getPublication(
+  context: AppContext, 
+  id: string,
+): Promise<void> {
   const logger = context.logger;
   const dbOperator = createDBOperator(context.database);
   let cursor = await dbOperator.getPublicationCursor(id);
+  let tryout = 3;
   while (true) {
     try {
       await Bluebird.delay(randomRange(1, 5) * 1000);
@@ -35,32 +39,27 @@ export async function getPublication(context: AppContext, id: string) {
         cursor: cursor,
         limit: LENS_DATA_LIMIT,
       })
-
-      const items = res.publications.items;
-      if (items.length > 0) {
-        await dbOperator.insertPublications(items);
-      }
-
+      const { items } = res.publications;
+      await dbOperator.insertPublications(items);
       // Update publication cursor for unexpected crash
-      cursor = res.publications.pageInfo.next;
+      if (res.publications.pageInfo.next !== null) {
+        cursor = res.publications.pageInfo.next;
+      }
       await dbOperator.updatePublicationCursor(id, cursor);
-
       if (items.length < LENS_DATA_LIMIT) {
-        await dbOperator.updateProfileTimestamp(id, context.timestamp);
         break;
       }
     } catch (e: any) {
-      //logger.error(`Get publication(profileId:${id}) failed, error:${JSON.stringify(e)}`);
-      logger.error(`Get publication(profileId:${id}) failed, error: code:${e.statusCode || e.networkError.statusCode}, message:${e.message || e.networkError.message}`);
-      if (e.statusCode === 404) {
-        break;
-      }
-
-      if (e.networkError.statusCode === 429) {
+      logger.error(`Get publication(profileId:${id}) failed, error:${e}`);
+      if (e.networkError && e.networkError.statusCode === 429) {
         await Bluebird.delay(5 * 60 * 1000);
+      }
+      if (--tryout === 0) {
+        break;
       }
     }
   }
+  await dbOperator.updateProfileCursorAndTimestamp(id, cursor, context.timestamp);
   //logger.info(`id:${id},cursor:${cursor} done.`);
 }
 
@@ -84,7 +83,7 @@ export async function handlePublications(
       }
     }, { concurrency : MAX_TASK })
   } catch (e: any) {
-    logger.error(e);
+    logger.error(`handle publication failed, error:${e}`);
   }
 }
 

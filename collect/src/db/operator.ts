@@ -39,9 +39,13 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertWhitelists = async (data: any): Promise<any> => {
+  const insertWhitelists = async (data: any[]): Promise<any> => {
     try {
-      return await db.dbHandler.collection(WHITELIST_COLL).insertMany(data);
+      if (data.length === 0) {
+        return;
+      }
+      const options = { ordered: false };
+      return await db.dbHandler.collection(WHITELIST_COLL).insertMany(data, options);
     } catch (e: any) {
       if (e.code !== 11000)
         throw new Error(`Insert whitelists failed, message:${e}`);
@@ -70,8 +74,11 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertPublications = async (data: any): Promise<void> => {
+  const insertPublications = async (data: any[]): Promise<void> => {
     try {
+      if (data.length === 0) {
+        return;
+      }
       const options = { ordered: false };
       return await db.dbHandler.collection(PUBLICATION_COLL).insertMany(data, options);
     } catch (e: any) {
@@ -116,6 +123,15 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
   }
 
+  const updateProfileCursorAndTimestamp = async (id: string, cursor: string, timestamp: number): Promise<void> => {
+    const query = { _id: id };
+    const updateData = { 
+      publicationCursor: cursor,
+      lastUpdateTimestamp: timestamp,
+    };
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
+  }
+
   const getProfileCursor = async (): Promise<string> => {
     const cursor = await db.dbHandler.collection(CURSOR_COLL).findOne({_id: 'profile'})
     if (cursor === null)
@@ -148,7 +164,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
           {publicationCursor: {$exists: false}},
           {lastUpdateTimestamp: {$exists: false}},
           {lastUpdateTimestamp: {$lt: lastUpdateTimestamp}},
-          //{publicationCursor: {$ne: '{}'}}
         ]
       },
       {
@@ -292,6 +307,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     updateProfileCursor,
     updateProfileTimestamp,
     updatePublicationCursor,
+    updateProfileCursorAndTimestamp,
     setSyncedBlockNumber,
     setStartBlockNumber,
     setStop,

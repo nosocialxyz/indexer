@@ -8,6 +8,8 @@ import { makeIntervalTask } from './task-utils';
 import { Logger } from 'winston';
 import { SimpleTask } from '../types/tasks.d';
 import { IsStopped } from './task-utils';
+import { getTimestamp } from '../utils';
+import { getPublication } from './publication-task';
 import {
   LENS_DATA_LIMIT,
   LENS_HUB_CONTRACT,
@@ -17,16 +19,18 @@ import {
   LENS_HUB_TOPICS,
   LENS_PERIPHERY_TOPICS,
   POLYGON_ENDPOINT,
+  MAX_TASK,
 } from '../config';
 
 
 export async function handleMonitor(
   context: AppContext,
   logger: Logger,
-  _isStopped: IsStopped,
+  isStopped: IsStopped,
 ): Promise<void> {
   const db = context.database;
   const dbOperator = createDBOperator(db);
+  context.logger = logger;
   let fromBlock = await dbOperator.getSyncedBlockNumber();
   if (fromBlock === -1) {
     fromBlock = await dbOperator.getStartBlockNumber();
@@ -38,7 +42,7 @@ export async function handleMonitor(
   const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
   const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
   const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
-  let toBlock = fromBlock + 1000;
+  let toBlock = fromBlock + 2000;
   logger.info(`from:${fromBlock}, to:${toBlock}`)
 
   try {
@@ -84,7 +88,7 @@ export async function handleMonitor(
     }
     profileIds = Array.from(new Set(profileIds));
     logger.info(`Get new profile number:${profileIds.length}`);
-    await updateProfiles(context, profileIds);
+    await updateProfiles(context, profileIds, isStopped);
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
     logger.error(`Get logs from polychain failed,error:${e}.`);
@@ -107,11 +111,13 @@ export async function createMonitorTask(
   )
 }
 
-async function updateProfiles(context: AppContext, profileIds: string[]) {
+async function updateProfiles(
+  context: AppContext, 
+  profileIds: string[], 
+  isStopped: IsStopped,
+): Promise<void> {
   const logger = context.logger;
-  const db = context.database;
-  const dbOperator = createDBOperator(db);
-  let cursor = '{}';
+  const dbOperator = createDBOperator(context.database);
   let offset = 0;
   while (offset < profileIds.length) {
     try {
@@ -119,18 +125,14 @@ async function updateProfiles(context: AppContext, profileIds: string[]) {
       const profiles = await getProfiles({
         profileIds: profileIds.slice(offset,offset+LENS_DATA_LIMIT),
         limit: LENS_DATA_LIMIT,
-        cursor: cursor,
       })
 
-      if (profiles.items.length > 0) {
-        await dbOperator.insertProfiles(profiles.items);
-      }
+      await dbOperator.insertProfiles(profiles.items);
 
       if (profiles.items.length < LENS_DATA_LIMIT) {
         break;
       }
 
-      cursor = profiles.pageInfo.next;
       offset = offset + LENS_DATA_LIMIT;
     } catch (e: any) {
       logger.error(`Get profiles failed,error:${e}`);
@@ -141,4 +143,12 @@ async function updateProfiles(context: AppContext, profileIds: string[]) {
         await Bluebird.delay(5 * 60 * 1000);
     }
   }
+
+  // Update publications
+  context.timestamp = getTimestamp();
+  await Bluebird.map(profileIds, async (id) => {
+    if (!isStopped()) {
+      await getPublication(context, id);
+    }
+  }, { concurrency: MAX_TASK/2 });
 }

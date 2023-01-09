@@ -5,7 +5,7 @@ import { createChildLogger } from '../utils/logger';
 import { createDBOperator } from '../db/operator';
 import { createProfileTask } from "./profile-task";
 import { createPublicationTask } from "./publication-task";
-import { createUpdateTask } from "./update-task";
+import { createWhitelistTask } from "./whitelist-task";
 import { createMonitorTask } from "./monitor";
 import { createChildLoggerWith } from "../utils/logger";
 
@@ -20,7 +20,7 @@ export async function createSimpleTasks(
   let tasks = [
     createProfileTask,
     createPublicationTask,
-    createUpdateTask,
+    createWhitelistTask,
     createMonitorTask,
   ];
   return Bluebird.mapSeries(tasks, (t) => {

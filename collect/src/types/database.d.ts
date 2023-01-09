@@ -2,10 +2,10 @@ export interface DbOperator {
   insertOne: (collName: string, data: any) => Promise<void>;
   insertMany: (collName: string, data: any) => Promise<void>;
   insertWhitelist: (data: any) => Promise<any>;
-  insertWhitelists: (data: any) => Promise<any>;
+  insertWhitelists: (data: any[]) => Promise<any>;
   insertProfile: (data: any) => Promise<any>;
   insertProfiles: (data: any[]) => Promise<any>;
-  insertPublications: (data: any) => Promise<void>;
+  insertPublications: (data: any[]) => Promise<void>;
   deleteStop: () => Promise<void>;
   deleteOne: (collName: string, query: any) => Promise<void>;
   deleteMany: (collName: string, query: any) => Promise<void>;
@@ -13,6 +13,7 @@ export interface DbOperator {
   updateProfileCursor: (cursor: any, status?: string) => Promise<void>;
   updateProfileTimestamp: (id: string, timestamp: number) => Promise<void>;
   updatePublicationCursor: (id: string, cursor: string) => Promise<void>;
+  updateProfileCursorAndTimestamp: (id: string, cursor: string, timestamp: number) => Promise<void>;
   setSyncedBlockNumber: (blockNumber: number) => Promise<void>;
   setStartBlockNumber: () => Promise<void>;
   setStop: () => Promise<void>;
