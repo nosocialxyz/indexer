@@ -10,6 +10,7 @@ import {
 import { onError } from '@apollo/client/link/error';
 import fetch from 'cross-fetch';
 import { LENS_API } from './config';
+import { createChildLogger } from './utils/logger';
 import { getAuthenticationToken } from './state';
 
 const defaultOptions: DefaultOptions = {
@@ -30,14 +31,17 @@ const httpLink = new HttpLink({
 
 const timeoutLink = new ApolloLinkTimeout(60000);
 const timeoutHttpLink = timeoutLink.concat(httpLink);
+const logger = createChildLogger({moduleId:'ApolloClient'});
 
 const errorLink = onError(({ graphQLErrors, networkError }) => {
+  /*
   if (graphQLErrors)
     graphQLErrors.forEach(({ message, locations, path }) =>
-      console.log(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`)
+      logger.error(`[GraphQL error]: Message: ${message}, Location: ${JSON.stringify(locations)}, Path: ${path}`)
     );
 
-  if (networkError) console.log(`[Network error]: ${networkError}`);
+  if (networkError) logger.error(`[Network error]: ${networkError}`);
+  */
 });
 
 // example how you can pass in the x-access-token into requests using `ApolloLink`

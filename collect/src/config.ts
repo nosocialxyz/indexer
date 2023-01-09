@@ -69,22 +69,24 @@ export const INFURA_PROJECT_ID = getParam('INFURA_PROJECT_ID');
 
 export const INFURA_SECRET = getParam('INFURA_SECRET');
 
-export const PORT = 12345;
+export const PORT = getParamOrExit('PORT');
 
-export const DB_PATH = "/opt/nosocial/db";
+export const DB_PATH = getParamOrExit('DB_PATH');
 
-export const mongoServURI = 'mongodb://localhost:27017';
+export const mongoServURI = getParamOrExit('MONGO_SERVER_URI');
 
-export const LENS_DATA_LIMIT = 50;
+export const LENS_DATA_LIMIT = parseInt(getParamOrExit('LENS_DATA_LIMIT'));
 
-export const DBNAME = 'test';
+export const MAX_TASK = parseInt(getParamOrExit('MAX_TASK'));
+
+export const DB_NAME = getParamOrExit('DB_NAME');
 export const PROFILE_COLL = 'profile';
 export const PUBLICATION_COLL = 'publication';
 export const CURSOR_COLL = 'cursor';
 export const WHITELIST_COLL = 'whitelist';
 
 //export const POLYGON_ENDPOINT = "https://billowing-silent-friday.matic.discover.quiknode.pro/1d4fafb9f0722f3d64de51b10ab032bc0b1da6ee/";
-export const POLYGON_ENDPOINT = "https://polygon-rpc.com/";
+export const POLYGON_ENDPOINT = getParamOrExit('POLYGON_RPC_URL');
 export const LENS_HUB_EVENT_ABI = [
   "event PostCreated(uint256 indexed profileId,uint256 indexed pubId,string contentURI,address collectModule,bytes collectModuleReturnData,address referenceModule,bytes referenceModuleReturnData,uint256 timestamp)",
   "event ProfileCreated(uint256 indexed profileId,address indexed creator,address indexed to,string handle,string imageURI,address followModule,bytes followModuleReturnData,string followNFTURI,uint256 timestamp)",

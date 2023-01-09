@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { logger } from '../utils/logger';
 import { loadDB, MongoDB } from '../db';
 import { DbOperator } from '../types/database.d';
+import { getTimestamp } from '../utils';
 import { 
   POLYGON_ENDPOINT,
   PROFILE_COLL,
@@ -38,9 +39,13 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertWhitelists = async (data: any): Promise<any> => {
+  const insertWhitelists = async (data: any[]): Promise<any> => {
     try {
-      return await db.dbHandler.collection(WHITELIST_COLL).insertMany(data);
+      if (data.length === 0) {
+        return;
+      }
+      const options = { ordered: false };
+      return await db.dbHandler.collection(WHITELIST_COLL).insertMany(data, options);
     } catch (e: any) {
       if (e.code !== 11000)
         throw new Error(`Insert whitelists failed, message:${e}`);
@@ -56,8 +61,11 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertProfiles = async (data: any): Promise<any> => {
+  const insertProfiles = async (data: any[]): Promise<any> => {
     try {
+      if (data.length === 0) {
+        return;
+      }
       const options = { ordered: false };
       return await db.dbHandler.collection(PROFILE_COLL).insertMany(data, options);
     } catch (e: any) {
@@ -66,8 +74,11 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertPublications = async (data: any): Promise<void> => {
+  const insertPublications = async (data: any[]): Promise<void> => {
     try {
+      if (data.length === 0) {
+        return;
+      }
       const options = { ordered: false };
       return await db.dbHandler.collection(PUBLICATION_COLL).insertMany(data, options);
     } catch (e: any) {
@@ -82,12 +93,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
 
   const deleteMany = async (collName: string, query: any): Promise<void> => {
     await db.dbHandler.collection(collName).deleteMany(collName, query);
-  }
-
-  const isUpdateFinished = async (): Promise<boolean> => {
-    const query = { _id: 'profile' };
-    const res = await db.dbHandler.collection(CURSOR_COLL).findOne(query);
-    return res != null && res.status === 'complete';
   }
 
   const updateProfileCursor = async (cursor: any, status?: string): Promise<void> => {
@@ -112,37 +117,19 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
   }
 
-  const incTask = async (): Promise<void> => {
-    await db.dbHandler.collection(CURSOR_COLL).findOneAndUpdate(
-      {_id:'tasks'},
-      {$inc: {"value":1}},
-      {upsert: true},
-    )
+  const updateProfileTimestamp = async (id: string, timestamp: number): Promise<void> => {
+    const query = { _id: id };
+    const updateData = { lastUpdateTimestamp: timestamp };
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
   }
 
-  const decTask = async (): Promise<void> => {
-    await db.dbHandler.collection(CURSOR_COLL).findOneAndUpdate(
-      {
-        _id: 'tasks',
-        value: {$gt: 0}
-      },
-      {$inc: {"value":-1}},
-    )
-  }
-
-  const setTask = async (n: number): Promise<void> => {
-    const query = { _id: 'tasks' };
-    const updateData = { value: n };
-    const options = { upsert: true }; 
-    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
-  }
-
-  const getTask = async (): Promise<number> => {
-    const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'tasks'},{value:1});
-    if (res !== null)
-      return res.value;
-
-    return 0;
+  const updateProfileCursorAndTimestamp = async (id: string, cursor: string, timestamp: number): Promise<void> => {
+    const query = { _id: id };
+    const updateData = { 
+      publicationCursor: cursor,
+      lastUpdateTimestamp: timestamp,
+    };
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
   }
 
   const getProfileCursor = async (): Promise<string> => {
@@ -155,24 +142,37 @@ export function createDBOperator(db: MongoDB): DbOperator {
 
   const getPublicationCursor = async (id: string): Promise<string> => {
     const cursor = await db.dbHandler.collection(PROFILE_COLL).findOne({_id: id});
-    if (cursor == null)
+    if (cursor === null)
       return '{}';
 
-    if (cursor.publicationCursor === undefined)
+    if (cursor.publicationCursor === null || cursor.publicationCursor === undefined)
       return '{}';
 
     return cursor.publicationCursor;
   }
 
-  const getProfileIds = async (): Promise<any> => {
-    const res = await db.dbHandler.collection(PROFILE_COLL).find(
+  const getProfileIdsWithLimit = async (limit?: number): Promise<string[]> => {
+    if (limit === null || limit === undefined) {
+      limit = 1000;
+    }
+
+    const lastUpdateTimestamp = await getOrSetLastUpdateTimestamp();
+    const res: string[] = [];
+    const items = await db.dbHandler.collection(PROFILE_COLL).find(
       {
         $or: [
           {publicationCursor: {$exists: false}},
-          {publicationCursor: {$ne: '{}'}}
+          {lastUpdateTimestamp: {$exists: false}},
+          {lastUpdateTimestamp: {$lt: lastUpdateTimestamp}},
         ]
+      },
+      {
+        _id: 1,
       }
-    );
+    ).limit(limit).toArray();
+    for (const item of items) {
+      res.push(item._id);
+    }
     return res;
   }
 
@@ -209,19 +209,22 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const setStop = async (stop: boolean): Promise<void> => {
-    const query = { _id: 'stop' };
-    const updateData = { value: stop };
-    const options = { upsert: true };
-    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+  const setStop = async (): Promise<void> => {
+    try {
+      await db.dbHandler.collection(CURSOR_COLL).insertOne({ _id: 'stop' });
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert many data failed, message:${e}`);
+    }
   }
 
   const getStop = async (): Promise<boolean> => {
-    const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'stop'},{value:1});
-    if (res !== null)
-      return res.value;
+    const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'stop'});
+    return res !== null;
+  }
 
-    return false;
+  const deleteStop = async (): Promise<void> => {
+    await db.dbHandler.collection(CURSOR_COLL).deleteOne({_id:'stop'});
   }
 
   const getStartBlockNumber = async (): Promise<number> => {
@@ -255,6 +258,40 @@ export function createDBOperator(db: MongoDB): DbOperator {
     return res;
   }
 
+  const setLastUpdateTimestamp = async (timestamp: number): Promise<void> => {
+    const query = { _id: 'timestamp' };
+    const updateData = { lastUpdateTimestamp: timestamp };
+    const options = { upsert: true };
+    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+  }
+
+  const getOrSetLastUpdateTimestamp = async (): Promise<number> => {
+    const timestamp = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'timestamp'});
+    if (timestamp !== null) {
+      return timestamp.lastUpdateTimestamp;
+    }
+
+    const lastUpdateTimestamp = getTimestamp();
+    const query = { _id: 'timestamp' };
+    const updateData = { lastUpdateTimestamp: lastUpdateTimestamp };
+    const options = { upsert: true };
+    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+
+    return lastUpdateTimestamp;
+  }
+
+  const getWhitelistProfileIds = async (): Promise<string[]> => {
+    const addresses = await getWhiteList();
+    const profileIds: string[] = [];
+    for (const address of addresses) {
+      const items = await db.dbHandler.collection(PROFILE_COLL).find({ownedBy:address},{_id:1}).toArray()
+      for (const item of items) {
+        profileIds.push(item._id);
+      }
+    }
+    return profileIds;
+  }
+
   return {
     insertOne,
     insertMany,
@@ -265,24 +302,25 @@ export function createDBOperator(db: MongoDB): DbOperator {
     insertPublications,
     deleteOne,
     deleteMany,
+    deleteStop,
     updateProfile,
     updateProfileCursor,
+    updateProfileTimestamp,
     updatePublicationCursor,
-    isUpdateFinished,
-    incTask,
-    decTask,
-    getTask,
-    setTask,
+    updateProfileCursorAndTimestamp,
     setSyncedBlockNumber,
     setStartBlockNumber,
     setStop,
+    setLastUpdateTimestamp,
+    getStop,
     getProfileCursor,
     getPublicationCursor,
-    getProfileIds,
+    getProfileIdsWithLimit,
     getSyncedBlockNumber,
     getStartBlockNumber,
     getStatus,
     getWhiteList,
-    getStop,
+    getWhitelistProfileIds,
+    getOrSetLastUpdateTimestamp,
   }
 }
